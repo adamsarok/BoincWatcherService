@@ -3,6 +3,7 @@ using Microsoft.Extensions.Logging;
 using System;
 using System.Net.Http;
 using System.Net.Http.Json;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace BoincWatchService.Services;
@@ -48,5 +49,5 @@ public class FunctionAppService : IFunctionAppService {
 }
 
 public interface IFunctionAppService {
-	Task<bool> PutHostStats(HostStatsDto hostStats);
+	Task<bool> PutHostStats(HostStatsDto hostStats, CancellationToken cancellationToken);
 }
