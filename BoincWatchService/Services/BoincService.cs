@@ -29,7 +29,7 @@ namespace BoincWatchService.Services {
 					// Add timeout for connection
 					using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(30));
 					await client.ConnectAsync(host.IP, host.Port);
-					await GetHostData(host, client, result);
+					await UpdateHostData(host, client, result);
 				} catch (OperationCanceledException) {
 					result.State = HostStates.Down;
 					result.ErrorMsg = "Connection timeout";
@@ -53,14 +53,13 @@ namespace BoincWatchService.Services {
 
 		private async Task GetHostData(BoincHostOptions host, RpcClient client, HostState result) {
 			await client.AuthorizeAsync(host.Password);
-			Result[] tasks = await client.GetResultsAsync();
-			var boincHost = await client.GetHostInfoAsync();
 			var stats = await client.GetStateAsync();
-			var runningTasks = tasks.Where(x => x.CurrentCpuTime.TotalSeconds > 1);
-			result.HostName = boincHost.DomainName;
+			var runningTasks = stats.Results.Where(x => x.CurrentCpuTime.TotalSeconds > 1);
+			result.HostName = stats.HostInfo.DomainName;
+			//stats.Projects[0].
 			result.TasksStarted = runningTasks.Count();
-			if (tasks.Count() > 0) {
-				result.LatestTaskDownloadTime = tasks.Max(x => x.ReceivedTime);
+			if (stats.Results.Count() > 0) {
+				result.LatestTaskDownloadTime = stats.Results.Max(x => x.ReceivedTime);
 				result.State = HostStates.NoRunningTasks;
 				if (result.TasksStarted > 0) result.State = HostStates.OK;
 			} else result.State = HostStates.NoTasks;
