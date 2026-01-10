@@ -11,8 +11,8 @@ builder.ConfigureFunctionsWebApplication();
 // Register TableServiceClient
 builder.Services.AddSingleton(sp =>
 {
-    var connectionString = Environment.GetEnvironmentVariable("AzureWebJobsStorage") 
-        ?? throw new InvalidOperationException("AzureWebJobsStorage connection string not found");
+    var connectionString = Environment.GetEnvironmentVariable("STORAGE_CONNECTION_STRING") 
+        ?? throw new InvalidOperationException("STORAGE_CONNECTION_STRING not found");
     return new TableServiceClient(connectionString);
 });
 
