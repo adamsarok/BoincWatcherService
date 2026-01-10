@@ -2,7 +2,7 @@
   "profiles": {
     "BoincStatsFunctionApp": {
       "commandName": "Project",
-      "commandLineArgs": "--port 7269",
+      "commandLineArgs": "--port 7071",
       "launchBrowser": false
     }
   }
