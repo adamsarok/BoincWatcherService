@@ -2,6 +2,7 @@
 using Microsoft.Extensions.Options;
 using System.Net;
 using System.Net.Mail;
+using System.Threading.Tasks;
 
 namespace BoincWatchService.Services {
 	public class MailService : IMailService {
@@ -11,22 +12,23 @@ namespace BoincWatchService.Services {
 			_mailSettings = mailSettings.Value;
 		}
 
-		public async void SendMail(string subject, string body) {
+		public async Task SendMail(string subject, string body) {
 			if (!_mailSettings.IsEnabled) return;
 			using (var smtp = new SmtpClient(_mailSettings.SmtpHost, _mailSettings.SmtpPort)) {
 				smtp.UseDefaultCredentials = false;
 				smtp.Credentials = new NetworkCredential(_mailSettings.UserName, _mailSettings.Password);
-				MailMessage mailMessage = new MailMessage();
-				mailMessage.From = new MailAddress(_mailSettings.SenderAddress);
-				mailMessage.To.Add(_mailSettings.ToAddress);
-				mailMessage.Body = body;
-				mailMessage.Subject = subject;
-				await smtp.SendMailAsync(mailMessage);
+				using (var mailMessage = new MailMessage()) {
+					mailMessage.From = new MailAddress(_mailSettings.SenderAddress);
+					mailMessage.To.Add(_mailSettings.ToAddress);
+					mailMessage.Body = body;
+					mailMessage.Subject = subject;
+					await smtp.SendMailAsync(mailMessage);
+				}
 			}
 		}
 	}
 
 	public interface IMailService {
-		public void SendMail(string subject, string body);
+		public Task SendMail(string subject, string body);
 	}
 }

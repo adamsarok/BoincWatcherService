@@ -34,7 +34,7 @@ public class Stats
             var tableClient = _tableServiceClient.GetTableClient("HostStats");
             await tableClient.CreateIfNotExistsAsync();
 
-            var entity = await tableClient.GetEntityAsync<HostStatsDto>(partitionKey, rowKey);
+            var entity = await tableClient.GetEntityAsync<HostStatsTableEntity>(partitionKey, rowKey);
             return new OkObjectResult(entity.Value);
         }
         catch (Azure.RequestFailedException ex) when (ex.Status == 404)
@@ -51,14 +51,13 @@ public class Stats
     // PUT: /api/hoststats
     [Function("PutHostStats")]
     public async Task<IActionResult> PutHostStats(
-        [HttpTrigger(AuthorizationLevel.Anonymous, "put", Route = "hoststats")] HttpRequest req)
+        [HttpTrigger(AuthorizationLevel.Function, "put", Route = "hoststats")] HttpRequest req)
     {
         _logger.LogInformation("Putting HostStats");
 
         try
         {
-            var requestBody = await new StreamReader(req.Body).ReadToEndAsync();
-            var hostStats = JsonSerializer.Deserialize<HostStatsDto>(requestBody, new JsonSerializerOptions
+            var hostStats = await JsonSerializer.DeserializeAsync<HostStatsTableEntity>(req.Body, new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true
             });
@@ -95,7 +94,7 @@ public class Stats
             var tableClient = _tableServiceClient.GetTableClient("ProjectStats");
             await tableClient.CreateIfNotExistsAsync();
 
-            var entity = await tableClient.GetEntityAsync<ProjectStatsDto>(partitionKey, rowKey);
+            var entity = await tableClient.GetEntityAsync<ProjectStatsTableEntity>(partitionKey, rowKey);
             return new OkObjectResult(entity.Value);
         }
         catch (Azure.RequestFailedException ex) when (ex.Status == 404)
@@ -118,8 +117,7 @@ public class Stats
 
         try
         {
-            var requestBody = await new StreamReader(req.Body).ReadToEndAsync();
-            var projectStats = JsonSerializer.Deserialize<ProjectStatsDto>(requestBody, new JsonSerializerOptions
+            var projectStats = await JsonSerializer.DeserializeAsync<ProjectStatsTableEntity>(req.Body, new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true
             });

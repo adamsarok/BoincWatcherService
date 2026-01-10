@@ -32,12 +32,14 @@ namespace BoincWatchService {
 			while (!stoppingToken.IsCancellationRequested) {
 				_logger.LogInformation("Worker running at: {time}", DateTimeOffset.Now);
 				var st = await _boincService.GetHostStates();
-				var clientsToSend = st.Where(x => clientStatesToSend.Contains(x.State)).ToList();
-				if (clientsToSend.Count > 0) {
-					var msg = JsonSerializer.Serialize(clientsToSend, new JsonSerializerOptions { WriteIndented = true });
-					_mailService.SendMail($"Boinc client status {DateTime.Now}", msg);
+				if (clientStatesToSend != null && clientStatesToSend.Count > 0) {
+					var clientsToSend = st.Where(x => clientStatesToSend.Contains(x.State)).ToList();
+					if (clientsToSend.Count > 0) {
+						var msg = JsonSerializer.Serialize(clientsToSend, new JsonSerializerOptions { WriteIndented = true });
+						await _mailService.SendMail($"Boinc client status {DateTime.Now}", msg);
+					}
 				}
-				await Task.Delay(_schedulingSettings.ScheduleIntervalMinutes * 60 * 1000, stoppingToken);
+				await Task.Delay(TimeSpan.FromMinutes(_schedulingSettings.ScheduleIntervalMinutes), stoppingToken);
 			}
 		}
 	}

@@ -25,9 +25,6 @@ namespace BoincWatchService.Services {
 				RpcClient client = null;
 				try {
 					client = new RpcClient();
-
-					// Add timeout for connection
-					using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(30));
 					await client.ConnectAsync(host.IP, host.Port);
 					await UpdateHostData(host, client, result);
 				} catch (OperationCanceledException) {
@@ -56,9 +53,8 @@ namespace BoincWatchService.Services {
 			var stats = await client.GetStateAsync();
 			var runningTasks = stats.Results.Where(x => x.CurrentCpuTime.TotalSeconds > 1);
 			result.HostName = stats.HostInfo.DomainName;
-			//stats.Projects[0].
 			result.TasksStarted = runningTasks.Count();
-			if (stats.Results.Count() > 0) {
+			if (stats.Results.Any()) {
 				result.LatestTaskDownloadTime = stats.Results.Max(x => x.ReceivedTime);
 				result.State = HostStates.NoRunningTasks;
 				if (result.TasksStarted > 0) result.State = HostStates.OK;

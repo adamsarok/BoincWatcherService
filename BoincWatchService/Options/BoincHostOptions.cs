@@ -1,7 +1,16 @@
-﻿namespace BoincWatchService.Options;
+﻿using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
+
+namespace BoincWatchService.Options;
 
 public class BoincHostOptions {
-	public string IP { get; set; }
+	[Required]
+	public string IP { get; set; } 
+
+	[Required]
 	public int Port { get; set; }
+
+	[Required]
+	[JsonIgnore]
 	public string Password { get; set; }
 }

@@ -13,8 +13,9 @@ namespace BoincWatchService {
 		public static IHostBuilder CreateHostBuilder(string[] args) =>
 			Host.CreateDefaultBuilder(args)
 				.ConfigureAppConfiguration((hostContext, config) => {
-					// Explicitly add User Secrets in all environments
+					if (hostContext.HostingEnvironment.IsDevelopment()) {
 					config.AddUserSecrets<Program>();
+					}
 				})
 				.ConfigureServices((hostContext, services) => {
 					services.Configure<List<BoincHostOptions>>(hostContext.Configuration.GetSection("BoincHosts"));
