@@ -38,29 +38,37 @@ namespace BoincWatchService {
 				_logger.LogInformation("Worker running at: {time}", DateTimeOffset.Now);
 				var st = await _boincService.GetHostStates();
 
-				// Upload each host state to Function App
-				foreach (var hostState in st) {
-					var hostStats = MapHostStateToDto(hostState);
-					await _functionAppService.PutHostStats(hostStats, stoppingToken);
-				}
+				await UploadToFunctionApp(st, stoppingToken);
 
-				var aliveHosts = st.Where(x => x.State != HostStates.Down).ToList();
-				if (aliveHosts.Any()) {
-					var projectStats = MapToProjectStatsTableEntitys(aliveHosts);
-					foreach (var projectStat in projectStats) {
-						await _functionAppService.PutProjectStats(projectStat, stoppingToken);
-					}
-				}
-
-				if (clientStatesToSend != null && clientStatesToSend.Count > 0) {
-					var clientsToSend = st.Where(x => clientStatesToSend.Contains(x.State)).ToList();
-					if (clientsToSend.Count > 0) {
-						var msg = JsonSerializer.Serialize(clientsToSend, new JsonSerializerOptions { WriteIndented = true });
-						await _mailService.SendMail($"Boinc client status {DateTime.Now}", msg);
-					}
-				}
+				await SendMailNotification(clientStatesToSend, st);
 
 				await Task.Delay(TimeSpan.FromMinutes(_schedulingSettings.ScheduleIntervalMinutes), stoppingToken);
+			}
+		}
+
+		private async Task SendMailNotification(List<HostStates> clientStatesToSend, IEnumerable<HostState> st) {
+			if (clientStatesToSend != null && clientStatesToSend.Count > 0) {
+				var clientsToSend = st.Where(x => clientStatesToSend.Contains(x.State)).ToList();
+				if (clientsToSend.Count > 0) {
+					var msg = JsonSerializer.Serialize(clientsToSend, new JsonSerializerOptions { WriteIndented = true });
+					await _mailService.SendMail($"Boinc client status {DateTime.Now}", msg);
+				}
+			}
+		}
+
+		private async Task UploadToFunctionApp(IEnumerable<HostState> st, CancellationToken stoppingToken) {
+			// Upload each host state to Function App
+			foreach (var hostState in st) {
+				var hostStats = MapHostStateToDto(hostState);
+				await _functionAppService.PutHostStats(hostStats, stoppingToken);
+			}
+
+			var aliveHosts = st.Where(x => x.State != HostStates.Down).ToList();
+			if (aliveHosts.Any()) {
+				var projectStats = MapToProjectStatsTableEntitys(aliveHosts);
+				foreach (var projectStat in projectStats) {
+					await _functionAppService.PutProjectStats(projectStat, stoppingToken);
+				}
 			}
 		}
 
