@@ -1,0 +1,1 @@
+- [ ] log mail send to table storage

@@ -1,5 +1,4 @@
-﻿using BoincWatchService.Options;
-using Microsoft.Extensions.Options;
+﻿using BoincWatchService.Services.Interfaces;
 using System.Net;
 using System.Net.Mail;
 using System.Threading.Tasks;
@@ -26,9 +25,5 @@ namespace BoincWatchService.Services {
 				}
 			}
 		}
-	}
-
-	public interface IMailService {
-		public Task SendMail(string subject, string body);
 	}
 }

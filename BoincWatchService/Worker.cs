@@ -1,8 +1,10 @@
-using BoincWatchService.DTO;
 using BoincWatchService.Services;
+using BoincWatchService.Services.Interfaces;
+using Common.Models;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 using System.Threading;
@@ -42,6 +44,14 @@ namespace BoincWatchService {
 					await _functionAppService.PutHostStats(hostStats, stoppingToken);
 				}
 
+				var aliveHosts = st.Where(x => x.State != HostStates.Down).ToList();
+				if (aliveHosts.Any()) {
+					var projectStats = MapToProjectStatsTableEntitys(aliveHosts);
+					foreach (var projectStat in projectStats) {
+						await _functionAppService.PutProjectStats(projectStat, stoppingToken);
+					}
+				}
+
 				if (clientStatesToSend != null && clientStatesToSend.Count > 0) {
 					var clientsToSend = st.Where(x => clientStatesToSend.Contains(x.State)).ToList();
 					if (clientsToSend.Count > 0) {
@@ -54,25 +64,57 @@ namespace BoincWatchService {
 			}
 		}
 
-		private HostStatsDto MapHostStateToDto(HostState hostState) {
+		private HostStatsTableEntity MapHostStateToDto(HostState hostState) {
 			switch (hostState.State) {
 				case HostStates.Down:
-					return new HostStatsDto {
+					return new HostStatsTableEntity {
 						PartitionKey = DateTime.UtcNow.ToString("yyyyMMdd"),
 						RowKey = hostState.HostName,
-						LastTaskCompletedTimestamp = null,
+						LatestTaskDownloadTime = null,
 						TotalCredit = 0, // not good, we should really show the last known value
 						RAC = 0
 					};
 				default:
-					return new HostStatsDto {
+					return new HostStatsTableEntity {
 						PartitionKey = DateTime.UtcNow.ToString("yyyyMMdd"),
 						RowKey = hostState.HostName,
-						LastTaskCompletedTimestamp = hostState.LatestTaskDownloadTime,
+						LatestTaskDownloadTime = hostState.LatestTaskDownloadTime,
 						TotalCredit = hostState.CoreClientState.Projects.Sum(x => x.HostTotalCredit),
 						RAC = hostState.CoreClientState.Projects.Sum(x => x.HostAverageCredit)
 					};
 			}
+		}
+
+		private IEnumerable<ProjectStatsTableEntity> MapToProjectStatsTableEntitys(IEnumerable<HostState> aliveHosts) {
+			Dictionary<string, ProjectStatsTableEntity> projectStats = new();
+			foreach (var host in aliveHosts) {
+				foreach (var project in host.CoreClientState.Projects) {
+					var tasks = host.CoreClientState.Results
+						.Where(x => x.ProjectUrl == project.MasterUrl).ToList();
+					DateTimeOffset? latestDownloadTime = tasks.Count == 0 ? null : tasks.Max(x => x.ReceivedTime);
+					if (!projectStats.ContainsKey(project.ProjectName)) {
+						projectStats[project.ProjectName] = new ProjectStatsTableEntity {
+							PartitionKey = DateTime.UtcNow.ToString("yyyyMMdd"),
+							RowKey = project.ProjectName,
+							TotalCredit = project.UserTotalCredit,
+							RAC = project.UserAverageCredit,
+							LatestTaskDownloadTime = tasks.Count == 0 ? null : tasks.Max(x => x.ReceivedTime)
+						};
+					} else {
+						var projectStat = projectStats[project.ProjectName];
+						if (project.UserTotalCredit > projectStat.TotalCredit) {
+							projectStat.TotalCredit = project.UserTotalCredit;
+						}
+						if (project.UserAverageCredit > projectStat.RAC) {
+							projectStat.RAC = project.UserAverageCredit;
+						}
+						if (latestDownloadTime != null && (projectStat.LatestTaskDownloadTime == null || latestDownloadTime > projectStat.LatestTaskDownloadTime)) {
+							projectStat.LatestTaskDownloadTime = latestDownloadTime;
+						}
+					}
+				}
+			}
+			return projectStats.Values;
 		}
 	}
 }

@@ -1,4 +1,5 @@
 ﻿using BoincRpc;
+using BoincWatchService.Services.Interfaces;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -32,7 +33,6 @@ namespace BoincWatchService.Services {
 					result.State = HostStates.Down;
 					result.ErrorMsg = ex.Message;
 				} finally {
-					// Properly dispose the RPC client to release the connection
 					if (client != null) {
 						try {
 							client.Close();
@@ -59,10 +59,6 @@ namespace BoincWatchService.Services {
 				if (result.TasksStarted > 0) result.State = HostStates.OK;
 			} else result.State = HostStates.NoTasks;
 		}
-	}
-
-	public interface IBoincService {
-		public Task<IEnumerable<HostState>> GetHostStates();
 	}
 
 	public class HostState {

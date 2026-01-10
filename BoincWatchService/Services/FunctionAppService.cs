@@ -1,4 +1,5 @@
-using BoincWatchService.DTO;
+using BoincWatchService.Services.Interfaces;
+using Common.Models;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Net.Http;
@@ -23,7 +24,7 @@ public class FunctionAppService : IFunctionAppService {
 		}
 	}
 
-	public async Task<bool> PutHostStats(HostStatsDto hostStats, CancellationToken cancellationToken = default) {
+	public async Task<bool> PutHostStats(HostStatsTableEntity hostStats, CancellationToken cancellationToken = default) {
 		try {
 			if (!_options.IsEnabled) {
 				_logger.LogInformation("FunctionApp integration is disabled");
@@ -46,8 +47,28 @@ public class FunctionAppService : IFunctionAppService {
 			return false;
 		}
 	}
-}
 
-public interface IFunctionAppService {
-	Task<bool> PutHostStats(HostStatsDto hostStats, CancellationToken cancellationToken);
+	public async Task<bool> PutProjectStats(ProjectStatsTableEntity projectStats, CancellationToken cancellationToken) {
+		try {
+			if (!_options.IsEnabled) {
+				_logger.LogInformation("FunctionApp integration is disabled");
+				return false;
+			}
+
+			var url = $"{_options.BaseUrl}/api/projectstats";
+			var response = await _httpClient.PutAsJsonAsync(url, projectStats, cancellationToken);
+
+			if (response.IsSuccessStatusCode) {
+				_logger.LogInformation("Successfully uploaded host stats for {Project}", projectStats.RowKey);
+				return true;
+			} else {
+				_logger.LogWarning("Failed to upload host stats for {Project}. Status: {StatusCode}",
+					projectStats.RowKey, response.StatusCode);
+				return false;
+			}
+		} catch (Exception ex) {
+			_logger.LogError(ex, "Error uploading host stats for {Project}", projectStats.RowKey);
+			return false;
+		}
+	}
 }
