@@ -51,7 +51,7 @@ namespace BoincWatchService.Services {
 			return results;
 		}
 
-		private async Task GetHostData(BoincHostOptions host, RpcClient client, HostState result) {
+		private async Task UpdateHostData(BoincHostOptions host, RpcClient client, HostState result) {
 			await client.AuthorizeAsync(host.Password);
 			var stats = await client.GetStateAsync();
 			var runningTasks = stats.Results.Where(x => x.CurrentCpuTime.TotalSeconds > 1);
