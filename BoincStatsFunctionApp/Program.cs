@@ -12,11 +12,12 @@ builder.ConfigureFunctionsWebApplication();
 // Register TableServiceClient with managed identity
 builder.Services.AddSingleton(sp =>
 {
-    var storageName = Environment.GetEnvironmentVariable("StorageName") 
-        ?? throw new InvalidOperationException("StorageName environment variable not found");
+    var tableServiceUri = Environment.GetEnvironmentVariable("AzureWebJobsStorage__tableServiceUri") 
+        ?? throw new InvalidOperationException("AzureWebJobsStorage__tableServiceUri environment variable not found");
     
-    var tableServiceUri = new Uri($"https://{storageName}.table.core.windows.net/");
-    return new TableServiceClient(tableServiceUri, new DefaultAzureCredential());
+    return new TableServiceClient(new Uri(tableServiceUri), new DefaultAzureCredential(new DefaultAzureCredentialOptions {
+        ManagedIdentityClientId = Environment.GetEnvironmentVariable("AzureWebJobsStorage__clientId")
+    }));
 });
 
 builder.Services
