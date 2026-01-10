@@ -24,8 +24,6 @@ public class Stats {
 		[HttpTrigger(AuthorizationLevel.Function, "get", Route = "hoststats/{partitionKey}/{rowKey}")] HttpRequest req,
 		string partitionKey,
 		string rowKey) {
-		_logger.LogInformation($"Getting HostStats for PartitionKey: {partitionKey}, RowKey: {rowKey}");
-
 		try {
 			var tableClient = _tableServiceClient.GetTableClient("HostStats");
 			await tableClient.CreateIfNotExistsAsync();
@@ -40,12 +38,34 @@ public class Stats {
 		}
 	}
 
+	// GET: /api/projectstats/{partitionKey}/
+	[Function("GetAllHostStatsForDate")]
+	public async Task<IActionResult> GetAllHostStatsForDate(
+		[HttpTrigger(AuthorizationLevel.Function, "get", Route = "hoststats/{partitionKey}")] HttpRequest req,
+		string partitionKey) {
+		try {
+			var tableClient = _tableServiceClient.GetTableClient("HostStats");
+			await tableClient.CreateIfNotExistsAsync();
+
+			var query = tableClient.QueryAsync<HostStatsTableEntity>(
+				filter: $"PartitionKey eq '{partitionKey}'");
+
+			var results = new List<HostStatsTableEntity>();
+			await foreach (var entity in query) {
+				results.Add(entity);
+			}
+
+			return new OkObjectResult(results);
+		} catch (Exception ex) {
+			_logger.LogError(ex, "Error getting HostStats for partition");
+			return new StatusCodeResult(StatusCodes.Status500InternalServerError);
+		}
+	}
+
 	// PUT: /api/hoststats
 	[Function("PutHostStats")]
 	public async Task<IActionResult> PutHostStats(
 		[HttpTrigger(AuthorizationLevel.Function, "put", Route = "hoststats")] HttpRequest req) {
-		_logger.LogInformation("Putting HostStats");
-
 		try {
 			var hostStats = await JsonSerializer.DeserializeAsync<HostStatsTableEntity>(req.Body, new JsonSerializerOptions {
 				PropertyNameCaseInsensitive = true
@@ -72,8 +92,6 @@ public class Stats {
 		[HttpTrigger(AuthorizationLevel.Function, "get", Route = "projectstats/{partitionKey}/{rowKey}")] HttpRequest req,
 		string partitionKey,
 		string rowKey) {
-		_logger.LogInformation($"Getting ProjectStats for PartitionKey: {partitionKey}, RowKey: {rowKey}");
-
 		try {
 			var tableClient = _tableServiceClient.GetTableClient("ProjectStats");
 			await tableClient.CreateIfNotExistsAsync();
@@ -88,12 +106,34 @@ public class Stats {
 		}
 	}
 
+	// GET: /api/projectstats/{partitionKey}/
+	[Function("GetAllProjectStatsForDate")]
+	public async Task<IActionResult> GetAllProjectStatsForDate(
+		[HttpTrigger(AuthorizationLevel.Function, "get", Route = "projectstats/{partitionKey}")] HttpRequest req,
+		string partitionKey) {
+		try {
+			var tableClient = _tableServiceClient.GetTableClient("ProjectStats");
+			await tableClient.CreateIfNotExistsAsync();
+
+			var query = tableClient.QueryAsync<ProjectStatsTableEntity>(
+				filter: $"PartitionKey eq '{partitionKey}'");
+
+			var results = new List<ProjectStatsTableEntity>();
+			await foreach (var entity in query) {
+				results.Add(entity);
+			}
+
+			return new OkObjectResult(results);
+		} catch (Exception ex) {
+			_logger.LogError(ex, "Error getting ProjectStats for partition");
+			return new StatusCodeResult(StatusCodes.Status500InternalServerError);
+		}
+	}
+
 	// PUT: /api/projectstats
 	[Function("PutProjectStats")]
 	public async Task<IActionResult> PutProjectStats(
 		[HttpTrigger(AuthorizationLevel.Function, "put", Route = "projectstats")] HttpRequest req) {
-		_logger.LogInformation("Putting ProjectStats");
-
 		try {
 			var projectStats = await JsonSerializer.DeserializeAsync<ProjectStatsTableEntity>(req.Body, new JsonSerializerOptions {
 				PropertyNameCaseInsensitive = true
