@@ -59,15 +59,15 @@ public class FunctionAppService : IFunctionAppService {
 			var response = await _httpClient.PutAsJsonAsync(url, projectStats, cancellationToken);
 
 			if (response.IsSuccessStatusCode) {
-				_logger.LogInformation("Successfully uploaded host stats for {Project}", projectStats.RowKey);
+				_logger.LogInformation("Successfully uploaded project stats for {Project}", projectStats.RowKey);
 				return true;
 			} else {
-				_logger.LogWarning("Failed to upload host stats for {Project}. Status: {StatusCode}",
+				_logger.LogWarning("Failed to upload project stats for {Project}. Status: {StatusCode}",
 					projectStats.RowKey, response.StatusCode);
 				return false;
 			}
 		} catch (Exception ex) {
-			_logger.LogError(ex, "Error uploading host stats for {Project}", projectStats.RowKey);
+			_logger.LogError(ex, "Error uploading project stats for {Project}", projectStats.RowKey);
 			return false;
 		}
 	}

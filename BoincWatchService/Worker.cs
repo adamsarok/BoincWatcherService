@@ -98,7 +98,7 @@ namespace BoincWatchService {
 							RowKey = project.ProjectName,
 							TotalCredit = project.UserTotalCredit,
 							RAC = project.UserAverageCredit,
-							LatestTaskDownloadTime = tasks.Count == 0 ? null : tasks.Max(x => x.ReceivedTime)
+							LatestTaskDownloadTime = latestDownloadTime
 						};
 					} else {
 						var projectStat = projectStats[project.ProjectName];
