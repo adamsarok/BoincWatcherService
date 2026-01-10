@@ -7,7 +7,6 @@ public class BoincHostOptions {
 	[Required]
 	public string IP { get; set; } 
 
-	[Required]
 	public int Port { get; set; }
 
 	[Required]

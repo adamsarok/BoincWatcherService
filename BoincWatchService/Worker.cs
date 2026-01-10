@@ -39,7 +39,7 @@ namespace BoincWatchService {
 				// Upload each host state to Function App
 				foreach (var hostState in st) {
 					var hostStats = MapHostStateToDto(hostState);
-					await _functionAppService.PutHostStats(hostStats);
+					await _functionAppService.PutHostStats(hostStats, stoppingToken);
 				}
 
 				if (clientStatesToSend != null && clientStatesToSend.Count > 0) {

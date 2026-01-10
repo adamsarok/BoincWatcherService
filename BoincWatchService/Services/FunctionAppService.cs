@@ -22,7 +22,7 @@ public class FunctionAppService : IFunctionAppService {
 		}
 	}
 
-	public async Task<bool> PutHostStats(HostStatsDto hostStats) {
+	public async Task<bool> PutHostStats(HostStatsDto hostStats, CancellationToken cancellationToken = default) {
 		try {
 			if (!_options.IsEnabled) {
 				_logger.LogInformation("FunctionApp integration is disabled");
@@ -30,7 +30,7 @@ public class FunctionAppService : IFunctionAppService {
 			}
 
 			var url = $"{_options.BaseUrl}/api/hoststats";
-			var response = await _httpClient.PutAsJsonAsync(url, hostStats);
+			var response = await _httpClient.PutAsJsonAsync(url, hostStats, cancellationToken);
 
 			if (response.IsSuccessStatusCode) {
 				_logger.LogInformation("Successfully uploaded host stats for {HostName}", hostStats.RowKey);
