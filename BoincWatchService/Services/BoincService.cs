@@ -1,6 +1,4 @@
 ﻿using BoincRpc;
-using BoincWatchService.Options;
-using Microsoft.Extensions.Options;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -51,6 +49,7 @@ namespace BoincWatchService.Services {
 		private async Task UpdateHostData(BoincHostOptions host, RpcClient client, HostState result) {
 			await client.AuthorizeAsync(host.Password);
 			var stats = await client.GetStateAsync();
+			result.CoreClientState = stats;
 			var runningTasks = stats.Results.Where(x => x.CurrentCpuTime.TotalSeconds > 1);
 			result.HostName = stats.HostInfo.DomainName;
 			result.TasksStarted = runningTasks.Count();
@@ -74,5 +73,6 @@ namespace BoincWatchService.Services {
 		public HostStates State { get; set; }
 		public string ErrorMsg { get; set; }
 		public enum HostStates { Down, OK, NoRunningTasks, NoTasks }
+		public CoreClientState CoreClientState { get; set; }
 	}
 }

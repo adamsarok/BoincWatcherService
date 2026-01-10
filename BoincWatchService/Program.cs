@@ -1,4 +1,3 @@
-using BoincWatchService.Options;
 using BoincWatchService.Services;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -14,17 +13,20 @@ namespace BoincWatchService {
 			Host.CreateDefaultBuilder(args)
 				.ConfigureAppConfiguration((hostContext, config) => {
 					if (hostContext.HostingEnvironment.IsDevelopment()) {
-					config.AddUserSecrets<Program>();
+						config.AddUserSecrets<Program>();
 					}
 				})
 				.ConfigureServices((hostContext, services) => {
 					services.Configure<List<BoincHostOptions>>(hostContext.Configuration.GetSection("BoincHosts"));
 					services.Configure<MailOptions>(hostContext.Configuration.GetSection("MailSettings"));
 					services.Configure<SchedulingOptions>(hostContext.Configuration.GetSection("SchedulingSettings"));
+					services.Configure<FunctionAppOptions>(hostContext.Configuration.GetSection("FunctionAppSettings"));
 
 					services.AddHostedService<Worker>();
 					services.AddSingleton<IBoincService, BoincService>();
 					services.AddSingleton<IMailService, MailService>();
+
+					services.AddHttpClient<IFunctionAppService, FunctionAppService>();
 				});
 	}
 }
