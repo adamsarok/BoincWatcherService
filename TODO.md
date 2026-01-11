@@ -1,2 +1,3 @@
+- [ ] Add initial historic stats
 - [ ] RAC from project is incorrect. Build RAC, weekly, monthly stats from Table history
 - [ ] log mail send to table storage
