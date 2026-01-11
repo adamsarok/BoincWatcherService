@@ -38,7 +38,7 @@ jobs:
      - name: Build and push Service Docker image
        uses: docker/build-push-action@v6
        with:
-         context: ./BoincWatcherService
+         context: .
          file: ./BoincWatcherService/Dockerfile
          push: ${{ github.event_name != 'pull_request' }}
          tags: adamsarok/boinc-watcher-service
