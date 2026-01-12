@@ -1,5 +1,6 @@
 ﻿using BoincRpc;
 using BoincWatchService.Services.Interfaces;
+using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -8,16 +9,18 @@ using static BoincWatchService.Services.HostState;
 
 namespace BoincWatchService.Services {
 	public class BoincService : IBoincService {
-		private readonly List<BoincHostOptions> _hosts;
+		private readonly List<BoincHostOptions> hosts;
+		private readonly ILogger<BoincService> logger;
 
-		public BoincService(IOptions<List<BoincHostOptions>> hosts) {
-			_hosts = hosts.Value;
+		public BoincService(IOptions<List<BoincHostOptions>> hosts, ILogger<BoincService> logger) {
+			this.hosts = hosts.Value;
+			this.logger = logger;
 		}
 
 
 		public async Task<IEnumerable<HostState>> GetHostStates() {
 			List<HostState> results = new List<HostState>();
-			foreach (var host in _hosts) {
+			foreach (var host in hosts) {
 				var result = new HostState() {
 					IP = host.IP
 				};
@@ -26,10 +29,8 @@ namespace BoincWatchService.Services {
 					client = new RpcClient();
 					await client.ConnectAsync(host.IP, host.Port);
 					await UpdateHostData(host, client, result);
-				} catch (OperationCanceledException) {
-					result.State = HostStates.Down;
-					result.ErrorMsg = "Connection timeout";
 				} catch (Exception ex) {
+					logger.LogError(ex, "Error connecting to host {HostIP}", host.IP);
 					result.State = HostStates.Down;
 					result.ErrorMsg = ex.Message;
 				} finally {

@@ -32,12 +32,13 @@ public class FunctionAppUploadJob : IJob {
 
 			var st = await _boincService.GetHostStates();
 
-			foreach (var hostState in st) {
+			var aliveHosts = st.Where(x => x.State != HostStates.Down).ToList();
+
+			foreach (var hostState in aliveHosts) {
 				var hostStats = MapHostStateToDto(hostState, partitionKey);
 				await _functionAppService.PutHostStats(hostStats, context.CancellationToken);
 			}
 
-			var aliveHosts = st.Where(x => x.State != HostStates.Down).ToList();
 			if (aliveHosts.Any()) {
 				var projectStats = MapToProjectStatsTableEntitys(aliveHosts, partitionKey);
 				foreach (var projectStat in projectStats) {
