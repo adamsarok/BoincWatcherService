@@ -1,7 +1,7 @@
-using Common.Models;
+using BoincWatcherService.Models;
 using Microsoft.EntityFrameworkCore;
 
-namespace AdamSarok.BoincStatsFunctionApp.Data;
+namespace BoincWatchService.Data;
 
 public class StatsDbContext : DbContext {
 	public StatsDbContext(DbContextOptions<StatsDbContext> options) : base(options) {

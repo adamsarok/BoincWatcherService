@@ -1,10 +1,13 @@
+using BoincWatchService.Data;
 using BoincWatchService.Jobs;
 using BoincWatchService.Services;
 using BoincWatchService.Services.Interfaces;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Quartz;
+using System;
 using System.Collections.Generic;
 
 namespace BoincWatchService {
@@ -22,15 +25,30 @@ namespace BoincWatchService {
 				.ConfigureServices((hostContext, services) => {
 					services.Configure<List<BoincHostOptions>>(hostContext.Configuration.GetSection("BoincHosts"));
 					services.Configure<MailOptions>(hostContext.Configuration.GetSection("MailSettings"));
-					services.Configure<FunctionAppOptions>(hostContext.Configuration.GetSection("FunctionAppSettings"));
+					services.Configure<DatabaseOptions>(hostContext.Configuration.GetSection("DatabaseSettings"));
+
+					// Register DbContext with PostgreSQL
+					services.AddDbContext<StatsDbContext>(options => {
+						var connectionString = hostContext.Configuration.GetConnectionString("BoincWatcher");
+						if (string.IsNullOrEmpty(connectionString)) {
+							throw new InvalidOperationException("BoincWatcher connection string not found");
+						}
+
+						options.UseNpgsql(connectionString, npgsqlOptions => {
+							npgsqlOptions.EnableRetryOnFailure(
+								maxRetryCount: 5,
+								maxRetryDelay: TimeSpan.FromSeconds(30),
+								errorCodesToAdd: null);
+						});
+					});
 
 					services.AddSingleton<IBoincService, BoincService>();
 					services.AddSingleton<IMailService, MailService>();
-					services.AddHttpClient<IFunctionAppService, FunctionAppService>();
+					services.AddScoped<IStatsService, StatsService>();
 
 					services.AddQuartz(q => {
 						var mailOptions = hostContext.Configuration.GetSection("MailSettings").Get<MailOptions>();
-						var functionAppOptions = hostContext.Configuration.GetSection("FunctionAppSettings").Get<FunctionAppOptions>();
+						var databaseOptions = hostContext.Configuration.GetSection("DatabaseSettings").Get<DatabaseOptions>();
 
 						if (mailOptions?.IsEnabled == true) {
 							var mailJobKey = new JobKey("MailNotificationJob");
@@ -41,13 +59,13 @@ namespace BoincWatchService {
 								.WithCronSchedule(mailOptions.CronSchedule ?? "0 0 0 * * ?"));
 						}
 
-						if (functionAppOptions?.IsEnabled == true) {
-							var functionAppJobKey = new JobKey("FunctionAppUploadJob");
-							q.AddJob<FunctionAppUploadJob>(opts => opts.WithIdentity(functionAppJobKey));
+						if (databaseOptions?.IsEnabled == true) {
+							var statsJobKey = new JobKey("StatsUploadJob");
+							q.AddJob<FunctionAppUploadJob>(opts => opts.WithIdentity(statsJobKey));
 							q.AddTrigger(opts => opts
-								.ForJob(functionAppJobKey)
-								.WithIdentity("FunctionAppUploadJob-trigger")
-								.WithCronSchedule(functionAppOptions.CronSchedule ?? "0 0 0 * * ?"));
+								.ForJob(statsJobKey)
+								.WithIdentity("StatsUploadJob-trigger")
+								.WithCronSchedule(databaseOptions.CronSchedule ?? "0 0 0 * * ?"));
 						}
 					});
 

@@ -1,6 +1,6 @@
+using BoincWatcherService.Models;
 using BoincWatchService.Services;
 using BoincWatchService.Services.Interfaces;
-using Common.Models;
 using Microsoft.Extensions.Logging;
 using Quartz;
 using System;
@@ -14,21 +14,21 @@ namespace BoincWatchService.Jobs;
 public class FunctionAppUploadJob : IJob {
 	private readonly ILogger<FunctionAppUploadJob> _logger;
 	private readonly IBoincService _boincService;
-	private readonly IFunctionAppService _functionAppService;
+	private readonly IStatsService _statsService;
 
 	public FunctionAppUploadJob(
 		ILogger<FunctionAppUploadJob> logger,
 		IBoincService boincService,
-		IFunctionAppService functionAppService) {
+		IStatsService statsService) {
 		_logger = logger;
 		_boincService = boincService;
-		_functionAppService = functionAppService;
+		_statsService = statsService;
 	}
 
 	public async Task Execute(IJobExecutionContext context) {
 		try {
 			var partitionKey = DateTime.UtcNow.ToString("yyyyMMdd");
-			_logger.LogInformation("Function app upload job running at: {time}", DateTimeOffset.Now);
+			_logger.LogInformation("Stats upload job running at: {time}", DateTimeOffset.Now);
 
 			var st = await _boincService.GetHostStates();
 
@@ -36,19 +36,19 @@ public class FunctionAppUploadJob : IJob {
 
 			foreach (var hostState in aliveHosts) {
 				var hostStats = MapHostStateToDto(hostState, partitionKey);
-				await _functionAppService.PutHostStats(hostStats, context.CancellationToken);
+				await _statsService.UpsertHostStats(hostStats, context.CancellationToken);
 			}
 
 			if (aliveHosts.Any()) {
 				var projectStats = MapToProjectStatsTableEntitys(aliveHosts, partitionKey);
 				foreach (var projectStat in projectStats) {
-					await _functionAppService.PutProjectStats(projectStat, context.CancellationToken);
+					await _statsService.UpsertProjectStats(projectStat, context.CancellationToken);
 				}
 				_logger.LogInformation("Uploaded stats for {hostCount} hosts and {projectCount} projects",
 					aliveHosts.Count, projectStats.Count());
 			}
 		} catch (Exception ex) {
-			_logger.LogError(ex, "Error occurred during FunctionAppUploadJob execution");
+			_logger.LogError(ex, "Error occurred during stats upload job execution");
 		}
 	}
 

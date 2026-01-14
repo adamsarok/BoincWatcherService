@@ -3,10 +3,10 @@ using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace BoincStatsFunctionApp.Migrations
+namespace BoincWatcherService.Migrations
 {
     /// <inheritdoc />
-    public partial class Init : Migration
+    public partial class InitialCreate : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -15,11 +15,11 @@ namespace BoincStatsFunctionApp.Migrations
                 name: "HostStats",
                 columns: table => new
                 {
-                    YYYYMMDD = table.Column<string>(type: "nvarchar(450)", nullable: false),
-                    HostName = table.Column<string>(type: "nvarchar(450)", nullable: false),
-                    TotalCredit = table.Column<double>(type: "float", nullable: false),
-                    Timestamp = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: true),
-                    LatestTaskDownloadTime = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: true)
+                    YYYYMMDD = table.Column<string>(type: "character varying(8)", maxLength: 8, nullable: false),
+                    HostName = table.Column<string>(type: "text", nullable: false),
+                    TotalCredit = table.Column<double>(type: "double precision", nullable: false),
+                    Timestamp = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
+                    LatestTaskDownloadTime = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -30,11 +30,11 @@ namespace BoincStatsFunctionApp.Migrations
                 name: "ProjectStats",
                 columns: table => new
                 {
-                    YYYYMMDD = table.Column<string>(type: "nvarchar(450)", nullable: false),
-                    ProjectName = table.Column<string>(type: "nvarchar(450)", nullable: false),
-                    TotalCredit = table.Column<double>(type: "float", nullable: false),
-                    Timestamp = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: true),
-                    LatestTaskDownloadTime = table.Column<DateTimeOffset>(type: "datetimeoffset", nullable: true)
+                    YYYYMMDD = table.Column<string>(type: "character varying(8)", maxLength: 8, nullable: false),
+                    ProjectName = table.Column<string>(type: "text", nullable: false),
+                    TotalCredit = table.Column<double>(type: "double precision", nullable: false),
+                    Timestamp = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true),
+                    LatestTaskDownloadTime = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: true)
                 },
                 constraints: table =>
                 {
