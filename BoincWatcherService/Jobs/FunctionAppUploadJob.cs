@@ -52,49 +52,43 @@ public class FunctionAppUploadJob : IJob {
 		}
 	}
 
-	private HostStatsTableEntity MapHostStateToDto(HostState hostState, string partitionKey) {
+	private HostStats MapHostStateToDto(HostState hostState, string partitionKey) {
 		switch (hostState.State) {
 			case HostStates.Down:
-				return new HostStatsTableEntity {
-					PartitionKey = partitionKey,
-					RowKey = hostState.HostName,
+				return new HostStats {
+					YYYYMMDD = partitionKey,
+					HostName = hostState.HostName,
 					LatestTaskDownloadTime = null,
 					TotalCredit = 0,
-					RAC = 0
 				};
 			default:
-				return new HostStatsTableEntity {
-					PartitionKey = partitionKey,
-					RowKey = hostState.HostName,
+				return new HostStats {
+					YYYYMMDD = partitionKey,
+					HostName = hostState.HostName,
 					LatestTaskDownloadTime = hostState.LatestTaskDownloadTime,
 					TotalCredit = hostState.CoreClientState.Projects.Sum(x => x.HostTotalCredit),
-					RAC = hostState.CoreClientState.Projects.Sum(x => x.HostAverageCredit)
 				};
 		}
 	}
 
-	private IEnumerable<ProjectStatsTableEntity> MapToProjectStatsTableEntitys(IEnumerable<HostState> aliveHosts, string partitionKey) {
-		Dictionary<string, ProjectStatsTableEntity> projectStats = new();
+	private IEnumerable<ProjectStats> MapToProjectStatsTableEntitys(IEnumerable<HostState> aliveHosts, string partitionKey) {
+		Dictionary<string, ProjectStats> projectStats = new();
 		foreach (var host in aliveHosts) {
 			foreach (var project in host.CoreClientState.Projects) {
 				var tasks = host.CoreClientState.Results
 					.Where(x => x.ProjectUrl == project.MasterUrl).ToList();
 				DateTimeOffset? latestDownloadTime = tasks.Count == 0 ? null : tasks.Max(x => x.ReceivedTime);
 				if (!projectStats.ContainsKey(project.ProjectName)) {
-					projectStats[project.ProjectName] = new ProjectStatsTableEntity {
-						PartitionKey = partitionKey,
-						RowKey = project.ProjectName,
+					projectStats[project.ProjectName] = new ProjectStats {
+						YYYYMMDD = partitionKey,
+						ProjectName = project.ProjectName,
 						TotalCredit = project.UserTotalCredit,
-						RAC = project.UserAverageCredit,
 						LatestTaskDownloadTime = latestDownloadTime
 					};
 				} else {
 					var projectStat = projectStats[project.ProjectName];
 					if (project.UserTotalCredit > projectStat.TotalCredit) {
 						projectStat.TotalCredit = project.UserTotalCredit;
-					}
-					if (project.UserAverageCredit > projectStat.RAC) {
-						projectStat.RAC = project.UserAverageCredit;
 					}
 					if (latestDownloadTime != null && (projectStat.LatestTaskDownloadTime == null || latestDownloadTime > projectStat.LatestTaskDownloadTime)) {
 						projectStat.LatestTaskDownloadTime = latestDownloadTime;

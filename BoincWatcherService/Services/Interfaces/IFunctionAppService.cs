@@ -5,6 +5,6 @@ using System.Threading.Tasks;
 namespace BoincWatchService.Services.Interfaces;
 
 public interface IFunctionAppService {
-	Task<bool> PutHostStats(HostStatsTableEntity hostStats, CancellationToken cancellationToken);
-	Task<bool> PutProjectStats(ProjectStatsTableEntity projectStats, CancellationToken cancellationToken);
+	Task<bool> PutHostStats(HostStats hostStats, CancellationToken cancellationToken);
+	Task<bool> PutProjectStats(ProjectStats projectStats, CancellationToken cancellationToken);
 }

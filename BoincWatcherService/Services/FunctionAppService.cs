@@ -24,7 +24,7 @@ public class FunctionAppService : IFunctionAppService {
 		}
 	}
 
-	public async Task<bool> PutHostStats(HostStatsTableEntity hostStats, CancellationToken cancellationToken = default) {
+	public async Task<bool> PutHostStats(HostStats hostStats, CancellationToken cancellationToken = default) {
 		try {
 			if (!_options.IsEnabled) {
 				_logger.LogInformation("FunctionApp integration is disabled");
@@ -35,20 +35,20 @@ public class FunctionAppService : IFunctionAppService {
 			var response = await _httpClient.PutAsJsonAsync(url, hostStats, cancellationToken);
 
 			if (response.IsSuccessStatusCode) {
-				_logger.LogInformation("Successfully uploaded host stats for {HostName}", hostStats.RowKey);
+				_logger.LogInformation("Successfully uploaded host stats for {HostName}", hostStats.HostName);
 				return true;
 			} else {
 				_logger.LogWarning("Failed to upload host stats for {HostName}. Status: {StatusCode}",
-					hostStats.RowKey, response.StatusCode);
+					hostStats.HostName, response.StatusCode);
 				return false;
 			}
 		} catch (Exception ex) {
-			_logger.LogError(ex, "Error uploading host stats for {HostName}", hostStats.RowKey);
+			_logger.LogError(ex, "Error uploading host stats for {HostName}", hostStats.HostName);
 			return false;
 		}
 	}
 
-	public async Task<bool> PutProjectStats(ProjectStatsTableEntity projectStats, CancellationToken cancellationToken) {
+	public async Task<bool> PutProjectStats(ProjectStats projectStats, CancellationToken cancellationToken) {
 		try {
 			if (!_options.IsEnabled) {
 				_logger.LogInformation("FunctionApp integration is disabled");
@@ -59,15 +59,15 @@ public class FunctionAppService : IFunctionAppService {
 			var response = await _httpClient.PutAsJsonAsync(url, projectStats, cancellationToken);
 
 			if (response.IsSuccessStatusCode) {
-				_logger.LogInformation("Successfully uploaded project stats for {Project}", projectStats.RowKey);
+				_logger.LogInformation("Successfully uploaded project stats for {Project}", projectStats.ProjectName);
 				return true;
 			} else {
 				_logger.LogWarning("Failed to upload project stats for {Project}. Status: {StatusCode}",
-					projectStats.RowKey, response.StatusCode);
+					projectStats.ProjectName, response.StatusCode);
 				return false;
 			}
 		} catch (Exception ex) {
-			_logger.LogError(ex, "Error uploading project stats for {Project}", projectStats.RowKey);
+			_logger.LogError(ex, "Error uploading project stats for {Project}", projectStats.ProjectName);
 			return false;
 		}
 	}

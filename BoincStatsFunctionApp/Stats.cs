@@ -1,8 +1,9 @@
-using Azure.Data.Tables;
+using AdamSarok.BoincStatsFunctionApp.Data;
 using Common.Models;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Azure.Functions.Worker;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using System.Text.Json;
 
@@ -10,11 +11,11 @@ namespace AdamSarok.BoincStatsFunctionApp;
 
 public class Stats {
 	private readonly ILogger<Stats> _logger;
-	private readonly TableServiceClient _tableServiceClient;
+	private readonly StatsDbContext _dbContext;
 
-	public Stats(ILogger<Stats> logger, TableServiceClient tableServiceClient) {
+	public Stats(ILogger<Stats> logger, StatsDbContext dbContext) {
 		_logger = logger;
-		_tableServiceClient = tableServiceClient;
+		_dbContext = dbContext;
 	}
 
 
@@ -25,13 +26,14 @@ public class Stats {
 		string partitionKey,
 		string rowKey) {
 		try {
-			var tableClient = _tableServiceClient.GetTableClient("HostStats");
-			await tableClient.CreateIfNotExistsAsync();
+			var entity = await _dbContext.HostStats
+				.FirstOrDefaultAsync(h => h.YYYYMMDD == partitionKey && h.HostName == rowKey);
 
-			var entity = await tableClient.GetEntityAsync<HostStatsTableEntity>(partitionKey, rowKey);
-			return new OkObjectResult(entity.Value);
-		} catch (Azure.RequestFailedException ex) when (ex.Status == 404) {
-			return new NotFoundResult();
+			if (entity == null) {
+				return new NotFoundResult();
+			}
+
+			return new OkObjectResult(entity);
 		} catch (Exception ex) {
 			_logger.LogError(ex, "Error getting HostStats");
 			return new StatusCodeResult(StatusCodes.Status500InternalServerError);
@@ -44,16 +46,9 @@ public class Stats {
 		[HttpTrigger(AuthorizationLevel.Function, "get", Route = "hoststats/{partitionKey}")] HttpRequest req,
 		string partitionKey) {
 		try {
-			var tableClient = _tableServiceClient.GetTableClient("HostStats");
-			await tableClient.CreateIfNotExistsAsync();
-
-			var query = tableClient.QueryAsync<HostStatsTableEntity>(
-				filter: $"PartitionKey eq '{partitionKey}'");
-
-			var results = new List<HostStatsTableEntity>();
-			await foreach (var entity in query) {
-				results.Add(entity);
-			}
+			var results = await _dbContext.HostStats
+				.Where(h => h.YYYYMMDD == partitionKey)
+				.ToListAsync();
 
 			return new OkObjectResult(results);
 		} catch (Exception ex) {
@@ -67,19 +62,32 @@ public class Stats {
 	public async Task<IActionResult> PutHostStats(
 		[HttpTrigger(AuthorizationLevel.Function, "put", Route = "hoststats")] HttpRequest req) {
 		try {
-			var hostStats = await JsonSerializer.DeserializeAsync<HostStatsTableEntity>(req.Body, new JsonSerializerOptions {
+			var hostStats = await JsonSerializer.DeserializeAsync<HostStats>(req.Body, new JsonSerializerOptions {
 				PropertyNameCaseInsensitive = true
 			});
 
-			if (hostStats == null || string.IsNullOrEmpty(hostStats.PartitionKey) || string.IsNullOrEmpty(hostStats.RowKey)) {
-				return new BadRequestObjectResult("Invalid HostStatsDto. PartitionKey and RowKey are required.");
+			if (hostStats == null || string.IsNullOrEmpty(hostStats.YYYYMMDD) || string.IsNullOrEmpty(hostStats.HostName)) {
+				return new BadRequestObjectResult("Invalid HostStats. YYMMMDDDD and HostName are required.");
 			}
 
-			var tableClient = _tableServiceClient.GetTableClient("HostStats");
-			await tableClient.CreateIfNotExistsAsync();
+			// Check if entity exists
+			var existingEntity = await _dbContext.HostStats
+				.FirstOrDefaultAsync(h => h.YYYYMMDD == hostStats.YYYYMMDD && h.HostName == hostStats.HostName);
 
-			await tableClient.UpsertEntityAsync(hostStats);
-			return new OkObjectResult(hostStats);
+			if (existingEntity != null) {
+				// Update existing entity
+				existingEntity.TotalCredit = hostStats.TotalCredit;
+				existingEntity.Timestamp = hostStats.Timestamp ?? DateTimeOffset.UtcNow;
+				existingEntity.LatestTaskDownloadTime = hostStats.LatestTaskDownloadTime;
+				_dbContext.HostStats.Update(existingEntity);
+			} else {
+				// Insert new entity
+				hostStats.Timestamp = hostStats.Timestamp ?? DateTimeOffset.UtcNow;
+				_dbContext.HostStats.Add(hostStats);
+			}
+
+			await _dbContext.SaveChangesAsync();
+			return new OkObjectResult(existingEntity ?? hostStats);
 		} catch (Exception ex) {
 			_logger.LogError(ex, "Error putting HostStats");
 			return new StatusCodeResult(StatusCodes.Status500InternalServerError);
@@ -93,13 +101,14 @@ public class Stats {
 		string partitionKey,
 		string rowKey) {
 		try {
-			var tableClient = _tableServiceClient.GetTableClient("ProjectStats");
-			await tableClient.CreateIfNotExistsAsync();
+			var entity = await _dbContext.ProjectStats
+				.FirstOrDefaultAsync(p => p.YYYYMMDD == partitionKey && p.ProjectName == rowKey);
 
-			var entity = await tableClient.GetEntityAsync<ProjectStatsTableEntity>(partitionKey, rowKey);
-			return new OkObjectResult(entity.Value);
-		} catch (Azure.RequestFailedException ex) when (ex.Status == 404) {
-			return new NotFoundResult();
+			if (entity == null) {
+				return new NotFoundResult();
+			}
+
+			return new OkObjectResult(entity);
 		} catch (Exception ex) {
 			_logger.LogError(ex, "Error getting ProjectStats");
 			return new StatusCodeResult(StatusCodes.Status500InternalServerError);
@@ -112,16 +121,9 @@ public class Stats {
 		[HttpTrigger(AuthorizationLevel.Function, "get", Route = "projectstats/{partitionKey}")] HttpRequest req,
 		string partitionKey) {
 		try {
-			var tableClient = _tableServiceClient.GetTableClient("ProjectStats");
-			await tableClient.CreateIfNotExistsAsync();
-
-			var query = tableClient.QueryAsync<ProjectStatsTableEntity>(
-				filter: $"PartitionKey eq '{partitionKey}'");
-
-			var results = new List<ProjectStatsTableEntity>();
-			await foreach (var entity in query) {
-				results.Add(entity);
-			}
+			var results = await _dbContext.ProjectStats
+				.Where(p => p.YYYYMMDD == partitionKey)
+				.ToListAsync();
 
 			return new OkObjectResult(results);
 		} catch (Exception ex) {
@@ -135,19 +137,32 @@ public class Stats {
 	public async Task<IActionResult> PutProjectStats(
 		[HttpTrigger(AuthorizationLevel.Function, "put", Route = "projectstats")] HttpRequest req) {
 		try {
-			var projectStats = await JsonSerializer.DeserializeAsync<ProjectStatsTableEntity>(req.Body, new JsonSerializerOptions {
+			var projectStats = await JsonSerializer.DeserializeAsync<ProjectStats>(req.Body, new JsonSerializerOptions {
 				PropertyNameCaseInsensitive = true
 			});
 
-			if (projectStats == null || string.IsNullOrEmpty(projectStats.PartitionKey) || string.IsNullOrEmpty(projectStats.RowKey)) {
-				return new BadRequestObjectResult("Invalid ProjectStatsTableEntity. PartitionKey and RowKey are required.");
+			if (projectStats == null || string.IsNullOrEmpty(projectStats.YYYYMMDD) || string.IsNullOrEmpty(projectStats.ProjectName)) {
+				return new BadRequestObjectResult("Invalid ProjectStats. YYYYMMDD and ProjectName are required.");
 			}
 
-			var tableClient = _tableServiceClient.GetTableClient("ProjectStats");
-			await tableClient.CreateIfNotExistsAsync();
+			// Check if entity exists
+			var existingEntity = await _dbContext.ProjectStats
+				.FirstOrDefaultAsync(p => p.YYYYMMDD == projectStats.YYYYMMDD && p.ProjectName == projectStats.ProjectName);
 
-			await tableClient.UpsertEntityAsync(projectStats);
-			return new OkObjectResult(projectStats);
+			if (existingEntity != null) {
+				// Update existing entity
+				existingEntity.TotalCredit = projectStats.TotalCredit;
+				existingEntity.Timestamp = projectStats.Timestamp ?? DateTimeOffset.UtcNow;
+				existingEntity.LatestTaskDownloadTime = projectStats.LatestTaskDownloadTime;
+				_dbContext.ProjectStats.Update(existingEntity);
+			} else {
+				// Insert new entity
+				projectStats.Timestamp = projectStats.Timestamp ?? DateTimeOffset.UtcNow;
+				_dbContext.ProjectStats.Add(projectStats);
+			}
+
+			await _dbContext.SaveChangesAsync();
+			return new OkObjectResult(existingEntity ?? projectStats);
 		} catch (Exception ex) {
 			_logger.LogError(ex, "Error putting ProjectStats");
 			return new StatusCodeResult(StatusCodes.Status500InternalServerError);
