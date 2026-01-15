@@ -1,9 +1,14 @@
 using BoincWatcherService.Models;
 using BoincWatchService.Data;
 using BoincWatchService.Services.Interfaces;
+using Common.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Net.Http;
+using System.Net.Http.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -12,10 +17,18 @@ namespace BoincWatchService.Services;
 public class StatsService : IStatsService {
 	private readonly ILogger<StatsService> _logger;
 	private readonly StatsDbContext _dbContext;
+	private readonly IHttpClientFactory _httpClientFactory;
+	private readonly FunctionAppOptions _functionAppOptions;
 
-	public StatsService(ILogger<StatsService> logger, StatsDbContext dbContext) {
+	public StatsService(
+	ILogger<StatsService> logger,
+	StatsDbContext dbContext,
+	IHttpClientFactory httpClientFactory,
+	IOptions<FunctionAppOptions> functionAppOptions) {
 		_logger = logger;
 		_dbContext = dbContext;
+		_httpClientFactory = httpClientFactory;
+		_functionAppOptions = functionAppOptions.Value;
 	}
 
 	public async Task<bool> UpsertHostStats(HostStats hostStats, CancellationToken cancellationToken = default) {
@@ -72,6 +85,226 @@ public class StatsService : IStatsService {
 			return true;
 		} catch (Exception ex) {
 			_logger.LogError(ex, "Error saving project stats for {ProjectName}", projectStats.ProjectName);
+			return false;
+		}
+	}
+
+	public async Task<bool> UpsertAggregateStats(CancellationToken cancellationToken = default) {
+		try {
+			if (!_functionAppOptions.IsEnabled) {
+				_logger.LogWarning("Function app is not enabled. Skipping aggregate stats upload.");
+				return false;
+			}
+
+			if (string.IsNullOrEmpty(_functionAppOptions.BaseUrl)) {
+				_logger.LogWarning("Function app base URL is not configured.");
+				return false;
+			}
+
+			var today = DateTime.UtcNow.Date;
+
+			// Aggregate HostStats
+			var hostStatsAggregated = await AggregateHostStats(today, cancellationToken);
+
+			// Aggregate ProjectStats
+			var projectStatsAggregated = await AggregateProjectStats(today, cancellationToken);
+
+			// Upload to function app
+			var httpClient = _httpClientFactory.CreateClient();
+			var success = true;
+
+			foreach (var hostStat in hostStatsAggregated) {
+				if (!await UploadStatsToFunctionApp(httpClient, hostStat, cancellationToken)) {
+					success = false;
+				}
+			}
+
+			foreach (var projectStat in projectStatsAggregated) {
+				if (!await UploadStatsToFunctionApp(httpClient, projectStat, cancellationToken)) {
+					success = false;
+				}
+			}
+
+			if (success) {
+				_logger.LogInformation("Successfully uploaded aggregate stats for {hostCount} hosts and {projectCount} projects",
+					hostStatsAggregated.Count, projectStatsAggregated.Count);
+			}
+
+			return success;
+		} catch (Exception ex) {
+			_logger.LogError(ex, "Error upserting aggregate stats");
+			return false;
+		}
+	}
+
+	private async Task<List<StatsTableEntity>> AggregateHostStats(
+		DateTime today,
+		CancellationToken cancellationToken) {
+
+		var yesterday = today.AddDays(-1).ToString("yyyyMMdd");
+		var weekStart = today.AddDays(-(int)today.DayOfWeek).ToString("yyyyMMdd");
+		var monthStart = new DateTime(today.Year, today.Month, 1).ToString("yyyyMMdd");
+		var yearStart = new DateTime(today.Year, 1, 1).ToString("yyyyMMdd");
+
+		// Get latest stats for each project using raw SQL
+		var latestStats = await _dbContext.HostStats
+			.FromSqlRaw(@"
+				SELECT p.*
+				FROM ""HostStats"" p
+				INNER JOIN (
+					SELECT ""HostName"", MAX(""YYYYMMDD"") as max_yyyymmdd
+					FROM ""HostStats""
+					GROUP BY ""HostName""
+				) latest
+				ON p.""HostName"" = latest.""HostName""
+				AND p.""YYYYMMDD"" = latest.max_yyyymmdd")
+			.AsNoTracking()
+			.ToDictionaryAsync(c => c.HostName, v => new StatsTableEntity() {
+				PartitionKey = StatsTableEntity.HOST_STATS,
+				RowKey = v.HostName,
+				CreditTotal = v.TotalCredit,
+				LatestTaskDownloadTime = v.LatestTaskDownloadTime
+			}, cancellationToken);
+
+		var yesterdayStats = await _dbContext.HostStats
+			.Where(p => p.YYYYMMDD == yesterday)
+			.Select(x => new { x.HostName, x.TotalCredit })
+			.AsNoTracking()
+			.ToListAsync(cancellationToken);
+		foreach (var stat in yesterdayStats) {
+			latestStats.TryGetValue(stat.HostName, out var aggregated);
+			if (aggregated != null) aggregated.CreditToday = aggregated.CreditTotal - stat.TotalCredit;
+		}
+
+		var weekStartStats = await _dbContext.HostStats
+			.Where(p => p.YYYYMMDD == weekStart)
+			.Select(x => new { x.HostName, x.TotalCredit })
+			.AsNoTracking()
+			.ToListAsync(cancellationToken);
+		foreach (var stat in weekStartStats) {
+			latestStats.TryGetValue(stat.HostName, out var aggregated);
+			if (aggregated != null) aggregated.CreditThisWeek = aggregated.CreditTotal - stat.TotalCredit;
+		}
+
+		var monthStartStats = await _dbContext.HostStats
+			.Where(p => p.YYYYMMDD == monthStart)
+			.Select(x => new { x.HostName, x.TotalCredit })
+			.AsNoTracking()
+			.ToListAsync(cancellationToken);
+		foreach (var stat in monthStartStats) {
+			latestStats.TryGetValue(stat.HostName, out var aggregated);
+			if (aggregated != null) aggregated.CreditThisMonth = aggregated.CreditTotal - stat.TotalCredit;
+		}
+
+		var yearStartStats = await _dbContext.HostStats
+			.Where(p => p.YYYYMMDD == yearStart)
+			.Select(x => new { x.HostName, x.TotalCredit })
+			.AsNoTracking()
+			.ToListAsync(cancellationToken);
+		foreach (var stat in yearStartStats) {
+			latestStats.TryGetValue(stat.HostName, out var aggregated);
+			if (aggregated != null) aggregated.CreditThisYear = aggregated.CreditTotal - stat.TotalCredit;
+		}
+
+		return latestStats.Values.ToList();
+	}
+
+	private async Task<List<StatsTableEntity>> AggregateProjectStats(
+		DateTime today,
+		CancellationToken cancellationToken) {
+
+		var yesterday = today.AddDays(-1).ToString("yyyyMMdd");
+		var weekStart = today.AddDays(-(int)today.DayOfWeek).ToString("yyyyMMdd");
+		var monthStart = new DateTime(today.Year, today.Month, 1).ToString("yyyyMMdd");
+		var yearStart = new DateTime(today.Year, 1, 1).ToString("yyyyMMdd");
+
+		// Get latest stats for each project using raw SQL
+		var latestStats = await _dbContext.ProjectStats
+			.FromSqlRaw(@"
+				SELECT p.*
+				FROM ""ProjectStats"" p
+				INNER JOIN (
+					SELECT ""ProjectName"", MAX(""YYYYMMDD"") as max_yyyymmdd
+					FROM ""ProjectStats""
+					GROUP BY ""ProjectName""
+				) latest
+				ON p.""ProjectName"" = latest.""ProjectName""
+				AND p.""YYYYMMDD"" = latest.max_yyyymmdd")
+			.AsNoTracking()
+			.ToDictionaryAsync(c => c.ProjectName, v => new StatsTableEntity() {
+				PartitionKey = StatsTableEntity.PROJECT_STATS,
+				RowKey = v.ProjectName,
+				CreditTotal = v.TotalCredit,
+				LatestTaskDownloadTime = v.LatestTaskDownloadTime
+			}, cancellationToken);
+
+		var yesterdayStats = await _dbContext.ProjectStats
+			.Where(p => p.YYYYMMDD == yesterday)
+			.Select(x => new { x.ProjectName, x.TotalCredit })
+			.AsNoTracking()
+			.ToListAsync(cancellationToken);
+		foreach (var stat in yesterdayStats) {
+			latestStats.TryGetValue(stat.ProjectName, out var aggregated);
+			if (aggregated != null) aggregated.CreditToday = aggregated.CreditTotal - stat.TotalCredit;
+		}
+
+		var weekStartStats = await _dbContext.ProjectStats
+			.Where(p => p.YYYYMMDD == weekStart)
+			.Select(x => new { x.ProjectName, x.TotalCredit })
+			.AsNoTracking()
+			.ToListAsync(cancellationToken);
+		foreach (var stat in weekStartStats) {
+			latestStats.TryGetValue(stat.ProjectName, out var aggregated);
+			if (aggregated != null) aggregated.CreditThisWeek = aggregated.CreditTotal - stat.TotalCredit;
+		}
+
+		var monthStartStats = await _dbContext.ProjectStats
+			.Where(p => p.YYYYMMDD == monthStart)
+			.Select(x => new { x.ProjectName, x.TotalCredit })
+			.AsNoTracking()
+			.ToListAsync(cancellationToken);
+		foreach (var stat in monthStartStats) {
+			latestStats.TryGetValue(stat.ProjectName, out var aggregated);
+			if (aggregated != null) aggregated.CreditThisMonth = aggregated.CreditTotal - stat.TotalCredit;
+		}
+
+		var yearStartStats = await _dbContext.ProjectStats
+			.Where(p => p.YYYYMMDD == yearStart)
+			.Select(x => new { x.ProjectName, x.TotalCredit })
+			.AsNoTracking()
+			.ToListAsync(cancellationToken);
+		foreach (var stat in yearStartStats) {
+			latestStats.TryGetValue(stat.ProjectName, out var aggregated);
+			if (aggregated != null) aggregated.CreditThisYear = aggregated.CreditTotal - stat.TotalCredit;
+		}
+
+		return latestStats.Values.ToList();
+	}
+
+	private async Task<bool> UploadStatsToFunctionApp(HttpClient httpClient, StatsTableEntity stats, CancellationToken cancellationToken) {
+		try {
+			var url = $"{_functionAppOptions.BaseUrl.TrimEnd('/')}/api/stats";
+			
+			var request = new HttpRequestMessage(HttpMethod.Put, url) {
+				Content = JsonContent.Create(stats)
+			};
+			
+			if (!string.IsNullOrEmpty(_functionAppOptions.FunctionKey)) {
+				request.Headers.Add("x-functions-key", _functionAppOptions.FunctionKey);
+			}
+
+			var response = await httpClient.SendAsync(request, cancellationToken);
+
+			if (response.IsSuccessStatusCode) {
+				_logger.LogDebug("Successfully uploaded stats for {PartitionKey}/{RowKey}", stats.PartitionKey, stats.RowKey);
+				return true;
+			} else {
+				_logger.LogWarning("Failed to upload stats for {PartitionKey}/{RowKey}. Status: {StatusCode}",
+					stats.PartitionKey, stats.RowKey, response.StatusCode);
+				return false;
+			}
+		} catch (Exception ex) {
+			_logger.LogError(ex, "Error uploading stats for {PartitionKey}/{RowKey}", stats.PartitionKey, stats.RowKey);
 			return false;
 		}
 	}

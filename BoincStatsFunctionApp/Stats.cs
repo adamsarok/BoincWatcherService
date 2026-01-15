@@ -35,7 +35,7 @@ public class Stats {
 	}
 
 	[Function("GetAllHostStats")]
-	public async Task<IActionResult> GetAllHostStatsForDate(
+	public async Task<IActionResult> GetAllHostStats(
 		[HttpTrigger(AuthorizationLevel.Function, "get", Route = "hoststats")] HttpRequest req) {
 		try {
 			var tableClient = _tableServiceClient.GetTableClient(TableName);
@@ -57,7 +57,7 @@ public class Stats {
 	}
 
 	[Function("PutStats")]
-	public async Task<IActionResult> PutHostStats(
+	public async Task<IActionResult> PutStats(
 		[HttpTrigger(AuthorizationLevel.Function, "put", Route = "stats")] HttpRequest req) {
 		try {
 			var hostStats = await JsonSerializer.DeserializeAsync<StatsTableEntity>(req.Body, new JsonSerializerOptions {
@@ -65,7 +65,7 @@ public class Stats {
 			});
 
 			if (hostStats == null || string.IsNullOrEmpty(hostStats.PartitionKey) || string.IsNullOrEmpty(hostStats.RowKey)) {
-				return new BadRequestObjectResult("Invalid HostStatsDto. PartitionKey and RowKey are required.");
+				return new BadRequestObjectResult("Invalid StatsTableEntity. PartitionKey and RowKey are required.");
 			}
 
 			var tableClient = _tableServiceClient.GetTableClient(TableName);
@@ -97,8 +97,8 @@ public class Stats {
 		}
 	}
 
-	[Function("GetAllProjectStatsForDate")]
-	public async Task<IActionResult> GetAllProjectStatsForDate(
+	[Function("GetAllProjectStats")]
+	public async Task<IActionResult> GetAllProjectStats(
 		[HttpTrigger(AuthorizationLevel.Function, "get", Route = "projectstats")] HttpRequest req) {
 		try {
 			var tableClient = _tableServiceClient.GetTableClient(TableName);
