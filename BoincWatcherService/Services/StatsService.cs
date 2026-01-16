@@ -141,10 +141,10 @@ public class StatsService : IStatsService {
 		DateTime today,
 		CancellationToken cancellationToken) {
 
-		var yesterday = today.AddDays(-1).ToString("yyyyMMdd");
-		var weekStart = today.AddDays(-(int)today.DayOfWeek).ToString("yyyyMMdd");
-		var monthStart = new DateTime(today.Year, today.Month, 1).ToString("yyyyMMdd");
-		var yearStart = new DateTime(today.Year, 1, 1).ToString("yyyyMMdd");
+		var yesterday = today.AddDays(-1);
+		var weekStart = today.AddDays(-(int)today.DayOfWeek);
+		var monthStart = new DateTime(today.Year, today.Month, 1);
+		var yearStart = new DateTime(today.Year, 1, 1);
 
 		// Get latest stats for each project using raw SQL
 		var latestStats = await _dbContext.HostStats
@@ -166,41 +166,25 @@ public class StatsService : IStatsService {
 				LatestTaskDownloadTime = v.LatestTaskDownloadTime
 			}, cancellationToken);
 
-		var yesterdayStats = await _dbContext.HostStats
-			.Where(p => p.YYYYMMDD == yesterday)
-			.Select(x => new { x.HostName, x.TotalCredit })
-			.AsNoTracking()
-			.ToListAsync(cancellationToken);
+		var yesterdayStats = await GetEarliestHostStatAfter(yesterday, cancellationToken);
 		foreach (var stat in yesterdayStats) {
 			latestStats.TryGetValue(stat.HostName, out var aggregated);
 			if (aggregated != null) aggregated.CreditToday = aggregated.CreditTotal - stat.TotalCredit;
 		}
 
-		var weekStartStats = await _dbContext.HostStats
-			.Where(p => p.YYYYMMDD == weekStart)
-			.Select(x => new { x.HostName, x.TotalCredit })
-			.AsNoTracking()
-			.ToListAsync(cancellationToken);
+		var weekStartStats = await GetEarliestHostStatAfter(weekStart, cancellationToken);
 		foreach (var stat in weekStartStats) {
 			latestStats.TryGetValue(stat.HostName, out var aggregated);
 			if (aggregated != null) aggregated.CreditThisWeek = aggregated.CreditTotal - stat.TotalCredit;
 		}
 
-		var monthStartStats = await _dbContext.HostStats
-			.Where(p => p.YYYYMMDD == monthStart)
-			.Select(x => new { x.HostName, x.TotalCredit })
-			.AsNoTracking()
-			.ToListAsync(cancellationToken);
+		var monthStartStats = await GetEarliestHostStatAfter(monthStart, cancellationToken);
 		foreach (var stat in monthStartStats) {
 			latestStats.TryGetValue(stat.HostName, out var aggregated);
 			if (aggregated != null) aggregated.CreditThisMonth = aggregated.CreditTotal - stat.TotalCredit;
 		}
 
-		var yearStartStats = await _dbContext.HostStats
-			.Where(p => p.YYYYMMDD == yearStart)
-			.Select(x => new { x.HostName, x.TotalCredit })
-			.AsNoTracking()
-			.ToListAsync(cancellationToken);
+		var yearStartStats = await GetEarliestHostStatAfter(yearStart, cancellationToken);
 		foreach (var stat in yearStartStats) {
 			latestStats.TryGetValue(stat.HostName, out var aggregated);
 			if (aggregated != null) aggregated.CreditThisYear = aggregated.CreditTotal - stat.TotalCredit;
@@ -208,15 +192,54 @@ public class StatsService : IStatsService {
 
 		return latestStats.Values.ToList();
 	}
+	private async Task<List<(string HostName, double TotalCredit)>> GetEarliestHostStatAfter(DateTime fromDate,
+	CancellationToken cancellationToken) {
+		var results = await _dbContext.HostStats
+			.FromSqlRaw(@"
+				SELECT p.*
+				FROM ""HostStats"" p
+				INNER JOIN (
+					SELECT ""HostName"", MIN(""YYYYMMDD"") as min_yyyymmdd
+					FROM ""HostStats""
+					WHERE ""YYYYMMDD"" >= {0}
+					GROUP BY ""HostName""
+				) earliest
+				ON p.""HostName"" = earliest.""HostName""
+				AND p.""YYYYMMDD"" = earliest.min_yyyymmdd", fromDate.ToString("yyyyMMdd"))
+			.AsNoTracking()
+			.Select(x => new { x.HostName, x.TotalCredit })
+			.ToListAsync(cancellationToken);
 
+		return results.Select(x => (x.HostName, x.TotalCredit)).ToList();
+	}
+	private async Task<List<(string ProjectName, double TotalCredit)>> GetEarliestProjectStatAfter(DateTime fromDate,
+		CancellationToken cancellationToken) {
+		var results = await _dbContext.ProjectStats
+			.FromSqlRaw(@"
+				SELECT p.*
+				FROM ""ProjectStats"" p
+				INNER JOIN (
+					SELECT ""ProjectName"", MIN(""YYYYMMDD"") as min_yyyymmdd
+					FROM ""ProjectStats""
+					WHERE ""YYYYMMDD"" >= {0}
+					GROUP BY ""ProjectName""
+				) earliest
+				ON p.""ProjectName"" = earliest.""ProjectName""
+				AND p.""YYYYMMDD"" = earliest.min_yyyymmdd", fromDate.ToString("yyyyMMdd"))
+			.AsNoTracking()
+			.Select(x => new { x.ProjectName, x.TotalCredit })
+			.ToListAsync(cancellationToken);
+
+		return results.Select(x => (x.ProjectName, x.TotalCredit)).ToList();
+	}
 	private async Task<List<StatsTableEntity>> AggregateProjectStats(
 		DateTime today,
 		CancellationToken cancellationToken) {
 
-		var yesterday = today.AddDays(-1).ToString("yyyyMMdd");
-		var weekStart = today.AddDays(-(int)today.DayOfWeek).ToString("yyyyMMdd");
-		var monthStart = new DateTime(today.Year, today.Month, 1).ToString("yyyyMMdd");
-		var yearStart = new DateTime(today.Year, 1, 1).ToString("yyyyMMdd");
+		var yesterday = today.AddDays(-1);
+		var weekStart = today.AddDays(-(int)today.DayOfWeek);
+		var monthStart = new DateTime(today.Year, today.Month, 1);
+		var yearStart = new DateTime(today.Year, 1, 1);
 
 		// Get latest stats for each project using raw SQL
 		var latestStats = await _dbContext.ProjectStats
@@ -238,41 +261,25 @@ public class StatsService : IStatsService {
 				LatestTaskDownloadTime = v.LatestTaskDownloadTime
 			}, cancellationToken);
 
-		var yesterdayStats = await _dbContext.ProjectStats
-			.Where(p => p.YYYYMMDD == yesterday)
-			.Select(x => new { x.ProjectName, x.TotalCredit })
-			.AsNoTracking()
-			.ToListAsync(cancellationToken);
+		var yesterdayStats = await GetEarliestProjectStatAfter(yesterday, cancellationToken);
 		foreach (var stat in yesterdayStats) {
 			latestStats.TryGetValue(stat.ProjectName, out var aggregated);
 			if (aggregated != null) aggregated.CreditToday = aggregated.CreditTotal - stat.TotalCredit;
 		}
 
-		var weekStartStats = await _dbContext.ProjectStats
-			.Where(p => p.YYYYMMDD == weekStart)
-			.Select(x => new { x.ProjectName, x.TotalCredit })
-			.AsNoTracking()
-			.ToListAsync(cancellationToken);
+		var weekStartStats = await GetEarliestProjectStatAfter(weekStart, cancellationToken);
 		foreach (var stat in weekStartStats) {
 			latestStats.TryGetValue(stat.ProjectName, out var aggregated);
 			if (aggregated != null) aggregated.CreditThisWeek = aggregated.CreditTotal - stat.TotalCredit;
 		}
 
-		var monthStartStats = await _dbContext.ProjectStats
-			.Where(p => p.YYYYMMDD == monthStart)
-			.Select(x => new { x.ProjectName, x.TotalCredit })
-			.AsNoTracking()
-			.ToListAsync(cancellationToken);
+		var monthStartStats = await GetEarliestProjectStatAfter(monthStart, cancellationToken);
 		foreach (var stat in monthStartStats) {
 			latestStats.TryGetValue(stat.ProjectName, out var aggregated);
 			if (aggregated != null) aggregated.CreditThisMonth = aggregated.CreditTotal - stat.TotalCredit;
 		}
 
-		var yearStartStats = await _dbContext.ProjectStats
-			.Where(p => p.YYYYMMDD == yearStart)
-			.Select(x => new { x.ProjectName, x.TotalCredit })
-			.AsNoTracking()
-			.ToListAsync(cancellationToken);
+		var yearStartStats = await GetEarliestProjectStatAfter(yearStart, cancellationToken);
 		foreach (var stat in yearStartStats) {
 			latestStats.TryGetValue(stat.ProjectName, out var aggregated);
 			if (aggregated != null) aggregated.CreditThisYear = aggregated.CreditTotal - stat.TotalCredit;
@@ -284,11 +291,11 @@ public class StatsService : IStatsService {
 	private async Task<bool> UploadStatsToFunctionApp(HttpClient httpClient, StatsTableEntity stats, CancellationToken cancellationToken) {
 		try {
 			var url = $"{_functionAppOptions.BaseUrl.TrimEnd('/')}/api/stats";
-			
+
 			var request = new HttpRequestMessage(HttpMethod.Put, url) {
 				Content = JsonContent.Create(stats)
 			};
-			
+
 			if (!string.IsNullOrEmpty(_functionAppOptions.FunctionKey)) {
 				request.Headers.Add("x-functions-key", _functionAppOptions.FunctionKey);
 			}

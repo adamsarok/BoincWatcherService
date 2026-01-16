@@ -11,8 +11,7 @@ using static BoincWatchService.Services.HostState;
 
 namespace BoincWatchService.Jobs;
 
-public class FunctionAppUploadJob : IJob
-{
+public class FunctionAppUploadJob : IJob {
 	private readonly ILogger<FunctionAppUploadJob> _logger;
 	private readonly IBoincService _boincService;
 	private readonly IStatsService _statsService;
@@ -20,17 +19,14 @@ public class FunctionAppUploadJob : IJob
 	public FunctionAppUploadJob(
 		ILogger<FunctionAppUploadJob> logger,
 		IBoincService boincService,
-		IStatsService statsService)
-	{
+		IStatsService statsService) {
 		_logger = logger;
 		_boincService = boincService;
 		_statsService = statsService;
 	}
 
-	public async Task Execute(IJobExecutionContext context)
-	{
-		try
-		{
+	public async Task Execute(IJobExecutionContext context) {
+		try {
 			var partitionKey = DateTime.UtcNow.ToString("yyyyMMdd");
 			_logger.LogInformation("Stats upload job running at: {time}", DateTimeOffset.Now);
 
@@ -38,17 +34,14 @@ public class FunctionAppUploadJob : IJob
 
 			var aliveHosts = st.Where(x => x.State != HostStates.Down).ToList();
 
-			foreach (var hostState in aliveHosts)
-			{
+			foreach (var hostState in aliveHosts) {
 				var hostStats = MapHostStateToDto(hostState, partitionKey);
 				await _statsService.UpsertHostStats(hostStats, context.CancellationToken);
 			}
 
-			if (aliveHosts.Any())
-			{
+			if (aliveHosts.Any()) {
 				var projectStats = MapToProjectStatsTableEntitys(aliveHosts, partitionKey);
-				foreach (var projectStat in projectStats)
-				{
+				foreach (var projectStat in projectStats) {
 					await _statsService.UpsertProjectStats(projectStat, context.CancellationToken);
 				}
 				_logger.LogInformation("Uploaded stats for {hostCount} hosts and {projectCount} projects",
@@ -57,28 +50,22 @@ public class FunctionAppUploadJob : IJob
 				// Upload aggregate stats to function app
 				await _statsService.UpsertAggregateStats(context.CancellationToken);
 			}
-		}
-		catch (Exception ex)
-		{
+		} catch (Exception ex) {
 			_logger.LogError(ex, "Error occurred during stats upload job execution");
 		}
 	}
 
-	private HostStats MapHostStateToDto(HostState hostState, string partitionKey)
-	{
-		switch (hostState.State)
-		{
+	private HostStats MapHostStateToDto(HostState hostState, string partitionKey) {
+		switch (hostState.State) {
 			case HostStates.Down:
-				return new HostStats
-				{
+				return new HostStats {
 					YYYYMMDD = partitionKey,
 					HostName = hostState.HostName,
 					LatestTaskDownloadTime = null,
 					TotalCredit = 0,
 				};
 			default:
-				return new HostStats
-				{
+				return new HostStats {
 					YYYYMMDD = partitionKey,
 					HostName = hostState.HostName,
 					LatestTaskDownloadTime = hostState.LatestTaskDownloadTime,
@@ -87,35 +74,26 @@ public class FunctionAppUploadJob : IJob
 		}
 	}
 
-	private IEnumerable<ProjectStats> MapToProjectStatsTableEntitys(IEnumerable<HostState> aliveHosts, string partitionKey)
-	{
+	private IEnumerable<ProjectStats> MapToProjectStatsTableEntitys(IEnumerable<HostState> aliveHosts, string partitionKey) {
 		Dictionary<string, ProjectStats> projectStats = new();
-		foreach (var host in aliveHosts)
-		{
-			foreach (var project in host.CoreClientState.Projects)
-			{
+		foreach (var host in aliveHosts) {
+			foreach (var project in host.CoreClientState.Projects) {
 				var tasks = host.CoreClientState.Results
 					.Where(x => x.ProjectUrl == project.MasterUrl).ToList();
 				DateTimeOffset? latestDownloadTime = tasks.Count == 0 ? null : tasks.Max(x => x.ReceivedTime);
-				if (!projectStats.ContainsKey(project.ProjectName))
-				{
-					projectStats[project.ProjectName] = new ProjectStats
-					{
+				if (!projectStats.ContainsKey(project.ProjectName)) {
+					projectStats[project.ProjectName] = new ProjectStats {
 						YYYYMMDD = partitionKey,
 						ProjectName = project.ProjectName,
 						TotalCredit = project.UserTotalCredit,
 						LatestTaskDownloadTime = latestDownloadTime
 					};
-				}
-				else
-				{
+				} else {
 					var projectStat = projectStats[project.ProjectName];
-					if (project.UserTotalCredit > projectStat.TotalCredit)
-					{
+					if (project.UserTotalCredit > projectStat.TotalCredit) {
 						projectStat.TotalCredit = project.UserTotalCredit;
 					}
-					if (latestDownloadTime != null && (projectStat.LatestTaskDownloadTime == null || latestDownloadTime > projectStat.LatestTaskDownloadTime))
-					{
+					if (latestDownloadTime != null && (projectStat.LatestTaskDownloadTime == null || latestDownloadTime > projectStat.LatestTaskDownloadTime)) {
 						projectStat.LatestTaskDownloadTime = latestDownloadTime;
 					}
 				}
