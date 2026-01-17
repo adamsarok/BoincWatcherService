@@ -1,4 +1,6 @@
 using BoincWatcherService.Models;
+using BoincWatcherService.Services.Interfaces;
+using BoincWatchService.Data;
 using BoincWatchService.Services;
 using BoincWatchService.Services.Interfaces;
 using Microsoft.Extensions.Logging;
@@ -6,52 +8,45 @@ using Quartz;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using static BoincWatchService.Services.HostState;
 
 namespace BoincWatchService.Jobs;
 
-public class FunctionAppUploadJob : IJob {
-	private readonly ILogger<FunctionAppUploadJob> _logger;
-	private readonly IBoincService _boincService;
-	private readonly IStatsService _statsService;
-
-	public FunctionAppUploadJob(
-		ILogger<FunctionAppUploadJob> logger,
+public class FunctionAppUploadJob(ILogger<FunctionAppUploadJob> logger,
 		IBoincService boincService,
-		IStatsService statsService) {
-		_logger = logger;
-		_boincService = boincService;
-		_statsService = statsService;
-	}
+		IStatsService statsService,
+		StatsDbContext context,
+		IProjectMappingService projectMappingService) : IJob {
 
 	public async Task Execute(IJobExecutionContext context) {
 		try {
 			var partitionKey = DateTime.UtcNow.ToString("yyyyMMdd");
-			_logger.LogInformation("Stats upload job running at: {time}", DateTimeOffset.Now);
+			logger.LogInformation("Stats upload job running at: {time}", DateTimeOffset.Now);
 
-			var st = await _boincService.GetHostStates();
+			var st = await boincService.GetHostStates();
 
 			var aliveHosts = st.Where(x => x.State != HostStates.Down).ToList();
 
 			foreach (var hostState in aliveHosts) {
 				var hostStats = MapHostStateToDto(hostState, partitionKey);
-				await _statsService.UpsertHostStats(hostStats, context.CancellationToken);
+				await statsService.UpsertHostStats(hostStats, context.CancellationToken);
 			}
 
 			if (aliveHosts.Any()) {
-				var projectStats = MapToProjectStatsTableEntitys(aliveHosts, partitionKey);
+				var projectStats = await MapToProjectStatsTableEntitys(aliveHosts, partitionKey, context.CancellationToken);
 				foreach (var projectStat in projectStats) {
-					await _statsService.UpsertProjectStats(projectStat, context.CancellationToken);
+					await statsService.UpsertProjectStats(projectStat, context.CancellationToken);
 				}
-				_logger.LogInformation("Uploaded stats for {hostCount} hosts and {projectCount} projects",
+				logger.LogInformation("Uploaded stats for {hostCount} hosts and {projectCount} projects",
 					aliveHosts.Count, projectStats.Count());
 
 				// Upload aggregate stats to function app
-				await _statsService.UpsertAggregateStats(context.CancellationToken);
+				await statsService.UpsertAggregateStats(context.CancellationToken);
 			}
 		} catch (Exception ex) {
-			_logger.LogError(ex, "Error occurred during stats upload job execution");
+			logger.LogError(ex, "Error occurred during stats upload job execution");
 		}
 	}
 
@@ -74,22 +69,30 @@ public class FunctionAppUploadJob : IJob {
 		}
 	}
 
-	private IEnumerable<ProjectStats> MapToProjectStatsTableEntitys(IEnumerable<HostState> aliveHosts, string partitionKey) {
-		Dictionary<string, ProjectStats> projectStats = new();
+
+	private async Task<IEnumerable<ProjectStats>> MapToProjectStatsTableEntitys(IEnumerable<HostState> aliveHosts,
+		string partitionKey,
+		CancellationToken cancellationToken) {
+		Dictionary<Guid, ProjectStats> projectStats = new();
 		foreach (var host in aliveHosts) {
 			foreach (var project in host.CoreClientState.Projects) {
 				var tasks = host.CoreClientState.Results
 					.Where(x => x.ProjectUrl == project.MasterUrl).ToList();
 				DateTimeOffset? latestDownloadTime = tasks.Count == 0 ? null : tasks.Max(x => x.ReceivedTime);
-				if (!projectStats.ContainsKey(project.ProjectName)) {
-					projectStats[project.ProjectName] = new ProjectStats {
+
+				var dbProject = await projectMappingService.GetOrCreateProject(project.ProjectName, project.MasterUrl, cancellationToken);
+
+				if (!projectStats.ContainsKey(dbProject.ProjectId)) {
+					projectStats[dbProject.ProjectId] = new ProjectStats {
 						YYYYMMDD = partitionKey,
-						ProjectName = project.ProjectName,
+						ProjectName = dbProject.ProjectNameDisplay, // ProjectName is not normalized in BoincRpc - same 
 						TotalCredit = project.UserTotalCredit,
-						LatestTaskDownloadTime = latestDownloadTime
+						LatestTaskDownloadTime = latestDownloadTime,
+						MasterUrl = project.MasterUrl,
+						ProjectId = dbProject.ProjectId,
 					};
 				} else {
-					var projectStat = projectStats[project.ProjectName];
+					var projectStat = projectStats[dbProject.ProjectId];
 					if (project.UserTotalCredit > projectStat.TotalCredit) {
 						projectStat.TotalCredit = project.UserTotalCredit;
 					}

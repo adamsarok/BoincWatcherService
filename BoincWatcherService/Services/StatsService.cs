@@ -62,21 +62,14 @@ public class StatsService : IStatsService {
 
 	public async Task<bool> UpsertProjectStats(ProjectStats projectStats, CancellationToken cancellationToken = default) {
 		try {
-			if (string.IsNullOrEmpty(projectStats.YYYYMMDD) || string.IsNullOrEmpty(projectStats.ProjectName)) {
-				_logger.LogWarning("Invalid ProjectStats. YYYYMMDD and ProjectName are required.");
-				return false;
-			}
-
 			var existingEntity = await _dbContext.ProjectStats
-				.FirstOrDefaultAsync(p => p.YYYYMMDD == projectStats.YYYYMMDD && p.ProjectName == projectStats.ProjectName, cancellationToken);
+				.FirstOrDefaultAsync(p => p.YYYYMMDD == projectStats.YYYYMMDD && p.ProjectId == projectStats.ProjectId, cancellationToken);
 
 			if (existingEntity != null) {
 				existingEntity.TotalCredit = projectStats.TotalCredit;
-				existingEntity.Timestamp = projectStats.Timestamp ?? DateTimeOffset.UtcNow;
 				existingEntity.LatestTaskDownloadTime = projectStats.LatestTaskDownloadTime;
 				_dbContext.ProjectStats.Update(existingEntity);
 			} else {
-				projectStats.Timestamp = projectStats.Timestamp ?? DateTimeOffset.UtcNow;
 				_dbContext.ProjectStats.Add(projectStats);
 			}
 

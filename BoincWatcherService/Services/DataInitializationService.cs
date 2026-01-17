@@ -1,4 +1,5 @@
 using BoincWatcherService.Models;
+using BoincWatcherService.Services.Interfaces;
 using BoincWatchService.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -14,35 +15,27 @@ using System.Threading.Tasks;
 
 namespace BoincWatchService.Services;
 
-public class DataInitializationService : IHostedService {
-	private readonly ILogger<DataInitializationService> _logger;
-	private readonly IServiceProvider _serviceProvider;
-
-	public DataInitializationService(
-		ILogger<DataInitializationService> logger,
-		IServiceProvider serviceProvider) {
-		_logger = logger;
-		_serviceProvider = serviceProvider;
-	}
-
+public class DataInitializationService(ILogger<DataInitializationService> logger,
+		IServiceProvider serviceProvider) : IHostedService {
 	public async Task StartAsync(CancellationToken cancellationToken) {
-		using var scope = _serviceProvider.CreateScope();
+		using var scope = serviceProvider.CreateScope();
 		var dbContext = scope.ServiceProvider.GetRequiredService<StatsDbContext>();
+		var projectMappingService = scope.ServiceProvider.GetRequiredService<IProjectMappingService>();
 
 		try {
-			_logger.LogInformation("Checking if database initialization is needed...");
+			logger.LogInformation("Checking if database initialization is needed...");
 
 			// Check if ProjectStats table is empty
 			var hasData = await dbContext.ProjectStats.AnyAsync(cancellationToken);
 
 			if (!hasData) {
-				_logger.LogInformation("ProjectStats table is empty. Starting data import from init_stats.csv...");
-				await ImportInitialStatsAsync(dbContext, cancellationToken);
+				logger.LogInformation("ProjectStats table is empty. Starting data import from initstats.csv...");
+				await ImportInitialStatsAsync(dbContext, projectMappingService, cancellationToken);
 			} else {
-				_logger.LogInformation("ProjectStats table already contains data. Skipping initialization.");
+				logger.LogInformation("ProjectStats table already contains data. Skipping initialization.");
 			}
 		} catch (Exception ex) {
-			_logger.LogError(ex, "Error during data initialization");
+			logger.LogError(ex, "Error during data initialization");
 			// Don't stop the application, just log the error
 		}
 	}
@@ -75,11 +68,11 @@ public class DataInitializationService : IHostedService {
 		return result.ToArray();
 	}
 
-	private async Task ImportInitialStatsAsync(StatsDbContext dbContext, CancellationToken cancellationToken) {
-		var csvPath = "init_stats.csv";
+	private async Task ImportInitialStatsAsync(StatsDbContext dbContext, IProjectMappingService projectMappingService, CancellationToken cancellationToken) {
+		var csvPath = "initstats.csv";
 
 		if (!File.Exists(csvPath)) {
-			_logger.LogWarning("init_stats.csv file not found at path: {Path}", Path.GetFullPath(csvPath));
+			logger.LogWarning("initstats.csv file not found at path: {Path}", Path.GetFullPath(csvPath));
 			return;
 		}
 
@@ -96,7 +89,7 @@ public class DataInitializationService : IHostedService {
 
 				var parts = ParseCsvLine(line);
 				if (parts.Length < 2) {
-					_logger.LogWarning("Invalid line in CSV: {Line}", line);
+					logger.LogWarning("Invalid line in CSV: {Line}", line);
 					continue;
 				}
 
@@ -104,15 +97,17 @@ public class DataInitializationService : IHostedService {
 				var pointsText = parts[1].Replace(",", "");
 
 				if (!double.TryParse(pointsText, NumberStyles.Float, CultureInfo.InvariantCulture, out var totalCredit)) {
-					_logger.LogWarning("Could not parse points for project {ProjectName}: {Points}", projectName, parts[1]);
+					logger.LogWarning("Could not parse points for project {ProjectName}: {Points}", projectName, parts[1]);
 					continue;
 				}
 
+				var project = await projectMappingService.GetOrCreateProject(projectName, "", cancellationToken);
+
 				var projectStats = new ProjectStats {
+					ProjectId = project.ProjectId,
 					YYYYMMDD = "19990101",
 					ProjectName = projectName,
 					TotalCredit = totalCredit,
-					Timestamp = timestamp,
 					LatestTaskDownloadTime = null
 				};
 
@@ -121,9 +116,9 @@ public class DataInitializationService : IHostedService {
 			}
 
 			await dbContext.SaveChangesAsync(cancellationToken);
-			_logger.LogInformation("Successfully imported {Count} project stats from init_stats.csv", importedCount);
+			logger.LogInformation("Successfully imported {Count} project stats from initstats.csv", importedCount);
 		} catch (Exception ex) {
-			_logger.LogError(ex, "Error importing data from init_stats.csv");
+			logger.LogError(ex, "Error importing data from initstats.csv");
 			throw;
 		}
 	}
