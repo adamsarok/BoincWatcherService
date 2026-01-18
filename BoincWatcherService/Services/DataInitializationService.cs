@@ -112,7 +112,6 @@ public class DataInitializationService : IHostedService {
 					YYYYMMDD = "19990101",
 					ProjectName = projectName,
 					TotalCredit = totalCredit,
-					Timestamp = timestamp,
 					LatestTaskDownloadTime = null
 				};
 

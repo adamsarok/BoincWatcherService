@@ -72,11 +72,9 @@ public class StatsService : IStatsService {
 
 			if (existingEntity != null) {
 				existingEntity.TotalCredit = projectStats.TotalCredit;
-				existingEntity.Timestamp = projectStats.Timestamp ?? DateTimeOffset.UtcNow;
 				existingEntity.LatestTaskDownloadTime = projectStats.LatestTaskDownloadTime;
 				_dbContext.ProjectStats.Update(existingEntity);
 			} else {
-				projectStats.Timestamp = projectStats.Timestamp ?? DateTimeOffset.UtcNow;
 				_dbContext.ProjectStats.Add(projectStats);
 			}
 

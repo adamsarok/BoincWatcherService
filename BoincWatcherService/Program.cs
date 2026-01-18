@@ -1,3 +1,4 @@
+using BoincWatcherService.Data;
 using BoincWatchService.Data;
 using BoincWatchService.Jobs;
 using BoincWatchService.Services;
@@ -44,6 +45,8 @@ namespace BoincWatchService {
 							maxRetryDelay: TimeSpan.FromSeconds(30),
 							errorCodesToAdd: null);
 					});
+					options.AddInterceptors(new EntityInterceptor());
+
 				});
 
 				services.AddSingleton<IBoincService, BoincService>();
@@ -70,10 +73,10 @@ namespace BoincWatchService {
 						var statsJobKey = new JobKey("StatsUploadJob");
 						q.AddJob<FunctionAppUploadJob>(opts => opts.WithIdentity(statsJobKey));
 
-						q.AddTrigger(opts => opts
-							.ForJob(statsJobKey)
-							.WithIdentity("StatsUploadJob-initial-trigger")
-							.StartNow());
+						//q.AddTrigger(opts => opts
+						//	.ForJob(statsJobKey)
+						//	.WithIdentity("StatsUploadJob-immediate-trigger")
+						//	.StartNow());
 
 						// Trigger on schedule
 						q.AddTrigger(opts => opts
