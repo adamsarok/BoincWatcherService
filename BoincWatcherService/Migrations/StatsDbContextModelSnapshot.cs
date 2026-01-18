@@ -48,7 +48,7 @@ namespace BoincWatcherService.Migrations
 
                     b.HasKey("YYYYMMDD", "HostName");
 
-                    b.ToTable("HostStats");
+                    b.ToTable("HostStats", (string)null);
                 });
 
             modelBuilder.Entity("BoincWatcherService.Models.ProjectStats", b =>
@@ -74,7 +74,7 @@ namespace BoincWatcherService.Migrations
 
                     b.HasKey("YYYYMMDD", "ProjectName");
 
-                    b.ToTable("ProjectStats");
+                    b.ToTable("ProjectStats", (string)null);
                 });
 #pragma warning restore 612, 618
         }
