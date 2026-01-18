@@ -70,6 +70,11 @@ namespace BoincWatchService {
 						var statsJobKey = new JobKey("StatsUploadJob");
 						q.AddJob<FunctionAppUploadJob>(opts => opts.WithIdentity(statsJobKey));
 
+						q.AddTrigger(opts => opts
+							.ForJob(statsJobKey)
+							.WithIdentity("StatsUploadJob-initial-trigger")
+							.StartNow());
+
 						// Trigger on schedule
 						q.AddTrigger(opts => opts
 							.ForJob(statsJobKey)
