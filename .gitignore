@@ -267,3 +267,6 @@ __azurite*
 
 /__blobstorage*/
 /__queues*/
+
+appsettings.json
+appsettings.Development.json
