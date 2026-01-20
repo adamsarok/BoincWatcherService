@@ -53,9 +53,6 @@ namespace BoincWatchService {
 				services.AddSingleton<IMailService, MailService>();
 				services.AddScoped<IStatsService, StatsService>();
 
-				// Register data initialization service
-				services.AddHostedService<DataInitializationService>();
-
 				services.AddQuartz(q => {
 					var mailOptions = hostContext.Configuration.GetSection("MailSettings").Get<MailOptions>();
 					var databaseOptions = hostContext.Configuration.GetSection("DatabaseSettings").Get<DatabaseOptions>();
@@ -73,10 +70,10 @@ namespace BoincWatchService {
 						var statsJobKey = new JobKey("StatsUploadJob");
 						q.AddJob<FunctionAppUploadJob>(opts => opts.WithIdentity(statsJobKey));
 
-						//q.AddTrigger(opts => opts
-						//	.ForJob(statsJobKey)
-						//	.WithIdentity("StatsUploadJob-immediate-trigger")
-						//	.StartNow());
+						q.AddTrigger(opts => opts
+							.ForJob(statsJobKey)
+							.WithIdentity("StatsUploadJob-immediate-trigger")
+							.StartNow());
 
 						// Trigger on schedule
 						q.AddTrigger(opts => opts
