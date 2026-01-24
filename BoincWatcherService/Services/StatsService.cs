@@ -1,4 +1,5 @@
 using BoincWatcherService.Models;
+using BoincWatcherService.Services.Interfaces;
 using BoincWatchService.Data;
 using BoincWatchService.Services.Interfaces;
 using Common.Models;
@@ -8,54 +9,71 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net.Http;
-using System.Net.Http.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
 namespace BoincWatchService.Services;
 
-public class StatsService : IStatsService {
-	private readonly ILogger<StatsService> _logger;
-	private readonly StatsDbContext _dbContext;
-	private readonly IHttpClientFactory _httpClientFactory;
-	private readonly FunctionAppOptions _functionAppOptions;
-
-	public StatsService(
+public class StatsService(
 	ILogger<StatsService> logger,
 	StatsDbContext dbContext,
 	IHttpClientFactory httpClientFactory,
-	IOptions<FunctionAppOptions> functionAppOptions) {
-		_logger = logger;
-		_dbContext = dbContext;
-		_httpClientFactory = httpClientFactory;
-		_functionAppOptions = functionAppOptions.Value;
-	}
+	IFunctionAppService functionAppService) : IStatsService {
 
 	public async Task<bool> UpsertHostStats(HostStats hostStats, CancellationToken cancellationToken = default) {
 		try {
 			if (string.IsNullOrEmpty(hostStats.YYYYMMDD) || string.IsNullOrEmpty(hostStats.HostName)) {
-				_logger.LogWarning("Invalid HostStats. YYYYMMDD and HostName are required.");
+				logger.LogWarning("Invalid HostStats. YYYYMMDD and HostName are required.");
 				return false;
 			}
 
-			var existingEntity = await _dbContext.HostStats
+			var existingEntity = await dbContext.HostStats
 				.FirstOrDefaultAsync(h => h.YYYYMMDD == hostStats.YYYYMMDD && h.HostName == hostStats.HostName, cancellationToken);
 
 			if (existingEntity != null) {
 				existingEntity.TotalCredit = hostStats.TotalCredit;
 				existingEntity.Timestamp = hostStats.Timestamp ?? DateTimeOffset.UtcNow;
 				existingEntity.LatestTaskDownloadTime = hostStats.LatestTaskDownloadTime;
-				_dbContext.HostStats.Update(existingEntity);
+				dbContext.HostStats.Update(existingEntity);
 			} else {
 				hostStats.Timestamp = hostStats.Timestamp ?? DateTimeOffset.UtcNow;
-				_dbContext.HostStats.Add(hostStats);
+				dbContext.HostStats.Add(hostStats);
 			}
 
-			await _dbContext.SaveChangesAsync(cancellationToken);
-			_logger.LogInformation("Successfully saved host stats for {HostName}", hostStats.HostName);
+			await dbContext.SaveChangesAsync(cancellationToken);
+			logger.LogInformation("Successfully saved host stats for {HostName}", hostStats.HostName);
 			return true;
 		} catch (Exception ex) {
-			_logger.LogError(ex, "Error saving host stats for {HostName}", hostStats.HostName);
+			logger.LogError(ex, "Error saving host stats for {HostName}", hostStats.HostName);
+			return false;
+		}
+	}
+
+	public async Task<bool> UpsertHostProjectStats(HostProjectStats hostProjectStats, CancellationToken cancellationToken = default) {
+		try {
+			if (string.IsNullOrEmpty(hostProjectStats.YYYYMMDD) || string.IsNullOrEmpty(hostProjectStats.HostName) || string.IsNullOrEmpty(hostProjectStats.ProjectName)) {
+				logger.LogWarning("Invalid HostProjectStats. YYYYMMDD, HostName, and ProjectName are required.");
+				return false;
+			}
+
+			var existingEntity = await dbContext.HostProjectStats
+				.FirstOrDefaultAsync(h => h.YYYYMMDD == hostProjectStats.YYYYMMDD && h.HostName == hostProjectStats.HostName && h.ProjectName == hostProjectStats.ProjectName, cancellationToken);
+
+			if (existingEntity != null) {
+				existingEntity.TotalCredit = hostProjectStats.TotalCredit;
+				existingEntity.Timestamp = hostProjectStats.Timestamp ?? DateTimeOffset.UtcNow;
+				existingEntity.LatestTaskDownloadTime = hostProjectStats.LatestTaskDownloadTime;
+				dbContext.HostProjectStats.Update(existingEntity);
+			} else {
+				hostProjectStats.Timestamp = hostProjectStats.Timestamp ?? DateTimeOffset.UtcNow;
+				dbContext.HostProjectStats.Add(hostProjectStats);
+			}
+
+			await dbContext.SaveChangesAsync(cancellationToken);
+			logger.LogInformation("Successfully saved host stats for {HostName} - {ProjectName}", hostProjectStats.HostName, hostProjectStats.ProjectName);
+			return true;
+		} catch (Exception ex) {
+			logger.LogError(ex, "Error saving host stats for {HostName} - {ProjectName}", hostProjectStats.HostName, hostProjectStats.ProjectName);
 			return false;
 		}
 	}
@@ -63,39 +81,34 @@ public class StatsService : IStatsService {
 	public async Task<bool> UpsertProjectStats(ProjectStats projectStats, CancellationToken cancellationToken = default) {
 		try {
 			if (string.IsNullOrEmpty(projectStats.YYYYMMDD) || string.IsNullOrEmpty(projectStats.ProjectName)) {
-				_logger.LogWarning("Invalid ProjectStats. YYYYMMDD and ProjectName are required.");
+				logger.LogWarning("Invalid ProjectStats. YYYYMMDD and ProjectName are required.");
 				return false;
 			}
 
-			var existingEntity = await _dbContext.ProjectStats
+			var existingEntity = await dbContext.ProjectStats
 				.FirstOrDefaultAsync(p => p.YYYYMMDD == projectStats.YYYYMMDD && p.ProjectName == projectStats.ProjectName, cancellationToken);
 
 			if (existingEntity != null) {
 				existingEntity.TotalCredit = projectStats.TotalCredit;
 				existingEntity.LatestTaskDownloadTime = projectStats.LatestTaskDownloadTime;
-				_dbContext.ProjectStats.Update(existingEntity);
+				dbContext.ProjectStats.Update(existingEntity);
 			} else {
-				_dbContext.ProjectStats.Add(projectStats);
+				dbContext.ProjectStats.Add(projectStats);
 			}
 
-			await _dbContext.SaveChangesAsync(cancellationToken);
-			_logger.LogInformation("Successfully saved project stats for {ProjectName}", projectStats.ProjectName);
+			await dbContext.SaveChangesAsync(cancellationToken);
+			logger.LogInformation("Successfully saved project stats for {ProjectName}", projectStats.ProjectName);
 			return true;
 		} catch (Exception ex) {
-			_logger.LogError(ex, "Error saving project stats for {ProjectName}", projectStats.ProjectName);
+			logger.LogError(ex, "Error saving project stats for {ProjectName}", projectStats.ProjectName);
 			return false;
 		}
 	}
 
 	public async Task<bool> UpsertAggregateStats(CancellationToken cancellationToken = default) {
 		try {
-			if (!_functionAppOptions.IsEnabled) {
-				_logger.LogWarning("Function app is not enabled. Skipping aggregate stats upload.");
-				return false;
-			}
-
-			if (string.IsNullOrEmpty(_functionAppOptions.BaseUrl)) {
-				_logger.LogWarning("Function app base URL is not configured.");
+			if (!functionAppService.IsEnabled) {
+				logger.LogWarning("Function app is not enabled. Skipping aggregate stats upload.");
 				return false;
 			}
 
@@ -108,29 +121,29 @@ public class StatsService : IStatsService {
 			var projectStatsAggregated = await AggregateProjectStats(today, cancellationToken);
 
 			// Upload to function app
-			var httpClient = _httpClientFactory.CreateClient();
+			var httpClient = httpClientFactory.CreateClient();
 			var success = true;
 
 			foreach (var hostStat in hostStatsAggregated) {
-				if (!await UploadStatsToFunctionApp(httpClient, hostStat, cancellationToken)) {
+				if (!await functionAppService.UploadStatsToFunctionApp(httpClient, hostStat, cancellationToken)) {
 					success = false;
 				}
 			}
 
 			foreach (var projectStat in projectStatsAggregated) {
-				if (!await UploadStatsToFunctionApp(httpClient, projectStat, cancellationToken)) {
+				if (!await functionAppService.UploadStatsToFunctionApp(httpClient, projectStat, cancellationToken)) {
 					success = false;
 				}
 			}
 
 			if (success) {
-				_logger.LogInformation("Successfully uploaded aggregate stats for {hostCount} hosts and {projectCount} projects",
+				logger.LogInformation("Successfully uploaded aggregate stats for {hostCount} hosts and {projectCount} projects",
 					hostStatsAggregated.Count, projectStatsAggregated.Count);
 			}
 
 			return success;
 		} catch (Exception ex) {
-			_logger.LogError(ex, "Error upserting aggregate stats");
+			logger.LogError(ex, "Error upserting aggregate stats");
 			return false;
 		}
 	}
@@ -145,17 +158,17 @@ public class StatsService : IStatsService {
 		var yearStart = new DateTime(today.Year, 1, 1);
 
 		// Get latest stats for each project using raw SQL
-		var latestStats = await _dbContext.HostStats
+		var latestStats = await dbContext.HostStats
 			.FromSqlRaw(@"
 				SELECT p.*
 				FROM ""HostStats"" p
 				INNER JOIN (
-					SELECT ""HostName"", MAX(""YYYYMMDD"") as max_yyyymmdd
+					SELECT ""HostName"", MAX(""YYYYMMDD"") as maxyyyymmdd
 					FROM ""HostStats""
 					GROUP BY ""HostName""
 				) latest
 				ON p.""HostName"" = latest.""HostName""
-				AND p.""YYYYMMDD"" = latest.max_yyyymmdd")
+				AND p.""YYYYMMDD"" = latest.maxyyyymmdd")
 			.AsNoTracking()
 			.ToDictionaryAsync(c => c.HostName, v => new StatsTableEntity() {
 				PartitionKey = StatsTableEntity.HOST_STATS,
@@ -192,18 +205,18 @@ public class StatsService : IStatsService {
 	}
 	private async Task<List<(string HostName, double TotalCredit)>> GetEarliestHostStatAfter(DateTime fromDate,
 	CancellationToken cancellationToken) {
-		var results = await _dbContext.HostStats
+		var results = await dbContext.HostStats
 			.FromSqlRaw(@"
 				SELECT p.*
 				FROM ""HostStats"" p
 				INNER JOIN (
-					SELECT ""HostName"", MIN(""YYYYMMDD"") as min_yyyymmdd
+					SELECT ""HostName"", MIN(""YYYYMMDD"") as minyyyymmdd
 					FROM ""HostStats""
 					WHERE ""YYYYMMDD"" >= {0}
 					GROUP BY ""HostName""
 				) earliest
 				ON p.""HostName"" = earliest.""HostName""
-				AND p.""YYYYMMDD"" = earliest.min_yyyymmdd", fromDate.ToString("yyyyMMdd"))
+				AND p.""YYYYMMDD"" = earliest.minyyyymmdd", fromDate.ToString("yyyyMMdd"))
 			.AsNoTracking()
 			.Select(x => new { x.HostName, x.TotalCredit })
 			.ToListAsync(cancellationToken);
@@ -212,18 +225,18 @@ public class StatsService : IStatsService {
 	}
 	private async Task<List<(string ProjectName, double TotalCredit)>> GetEarliestProjectStatAfter(DateTime fromDate,
 		CancellationToken cancellationToken) {
-		var results = await _dbContext.ProjectStats
+		var results = await dbContext.ProjectStats
 			.FromSqlRaw(@"
 				SELECT p.*
 				FROM ""ProjectStats"" p
 				INNER JOIN (
-					SELECT ""ProjectName"", MIN(""YYYYMMDD"") as min_yyyymmdd
+					SELECT ""ProjectName"", MIN(""YYYYMMDD"") as minyyyymmdd
 					FROM ""ProjectStats""
 					WHERE ""YYYYMMDD"" >= {0}
 					GROUP BY ""ProjectName""
 				) earliest
 				ON p.""ProjectName"" = earliest.""ProjectName""
-				AND p.""YYYYMMDD"" = earliest.min_yyyymmdd", fromDate.ToString("yyyyMMdd"))
+				AND p.""YYYYMMDD"" = earliest.minyyyymmdd", fromDate.ToString("yyyyMMdd"))
 			.AsNoTracking()
 			.Select(x => new { x.ProjectName, x.TotalCredit })
 			.ToListAsync(cancellationToken);
@@ -240,17 +253,17 @@ public class StatsService : IStatsService {
 		var yearStart = new DateTime(today.Year, 1, 1);
 
 		// Get latest stats for each project using raw SQL
-		var latestStats = await _dbContext.ProjectStats
+		var latestStats = await dbContext.ProjectStats
 			.FromSqlRaw(@"
 				SELECT p.*
 				FROM ""ProjectStats"" p
 				INNER JOIN (
-					SELECT ""ProjectName"", MAX(""YYYYMMDD"") as max_yyyymmdd
+					SELECT ""ProjectName"", MAX(""YYYYMMDD"") as maxyyyymmdd
 					FROM ""ProjectStats""
 					GROUP BY ""ProjectName""
 				) latest
 				ON p.""ProjectName"" = latest.""ProjectName""
-				AND p.""YYYYMMDD"" = latest.max_yyyymmdd")
+				AND p.""YYYYMMDD"" = latest.maxyyyymmdd")
 			.AsNoTracking()
 			.ToDictionaryAsync(c => c.ProjectName, v => new StatsTableEntity() {
 				PartitionKey = StatsTableEntity.PROJECT_STATS,
@@ -284,33 +297,5 @@ public class StatsService : IStatsService {
 		}
 
 		return latestStats.Values.ToList();
-	}
-
-	private async Task<bool> UploadStatsToFunctionApp(HttpClient httpClient, StatsTableEntity stats, CancellationToken cancellationToken) {
-		try {
-			var url = $"{_functionAppOptions.BaseUrl.TrimEnd('/')}/api/stats";
-
-			var request = new HttpRequestMessage(HttpMethod.Put, url) {
-				Content = JsonContent.Create(stats)
-			};
-
-			if (!string.IsNullOrEmpty(_functionAppOptions.FunctionKey)) {
-				request.Headers.Add("x-functions-key", _functionAppOptions.FunctionKey);
-			}
-
-			var response = await httpClient.SendAsync(request, cancellationToken);
-
-			if (response.IsSuccessStatusCode) {
-				_logger.LogDebug("Successfully uploaded stats for {PartitionKey}/{RowKey}", stats.PartitionKey, stats.RowKey);
-				return true;
-			} else {
-				_logger.LogWarning("Failed to upload stats for {PartitionKey}/{RowKey}. Status: {StatusCode}",
-					stats.PartitionKey, stats.RowKey, response.StatusCode);
-				return false;
-			}
-		} catch (Exception ex) {
-			_logger.LogError(ex, "Error uploading stats for {PartitionKey}/{RowKey}", stats.PartitionKey, stats.RowKey);
-			return false;
-		}
 	}
 }
