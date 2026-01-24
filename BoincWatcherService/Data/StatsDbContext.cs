@@ -8,6 +8,7 @@ public class StatsDbContext : DbContext {
 	}
 
 	public DbSet<HostStats> HostStats { get; set; } = null!;
+	public DbSet<HostProjectStats> HostProjectStats { get; set; } = null!;
 	public DbSet<ProjectStats> ProjectStats { get; set; } = null!;
 
 	protected override void OnModelCreating(ModelBuilder modelBuilder) {
@@ -16,6 +17,11 @@ public class StatsDbContext : DbContext {
 		modelBuilder.Entity<HostStats>()
 			.HasKey(x => new { x.YYYYMMDD, x.HostName });
 		modelBuilder.Entity<HostStats>()
+			.Property(x => x.YYYYMMDD).HasMaxLength(8);
+
+		modelBuilder.Entity<HostProjectStats>()
+			.HasKey(x => new { x.YYYYMMDD, x.HostName, x.ProjectName });
+		modelBuilder.Entity<HostProjectStats>()
 			.Property(x => x.YYYYMMDD).HasMaxLength(8);
 
 		modelBuilder.Entity<ProjectStats>()

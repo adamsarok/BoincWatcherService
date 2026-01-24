@@ -55,7 +55,9 @@ namespace BoincWatchService.Services {
 			result.HostName = stats.HostInfo.DomainName;
 			result.TasksStarted = runningTasks.Count();
 			if (stats.Results.Any()) {
-				result.LatestTaskDownloadTime = stats.Results.Max(x => x.ReceivedTime);
+				result.LatestTaskDownloadTimePerProjectUrl = stats.Results
+					.GroupBy(key => key.ProjectUrl)
+					.ToDictionary(key => key.Key, value => value.Max(m => m.ReceivedTime));
 				result.State = HostStates.NoRunningTasks;
 				if (result.TasksStarted > 0) result.State = HostStates.OK;
 			} else result.State = HostStates.NoTasks;
@@ -65,7 +67,7 @@ namespace BoincWatchService.Services {
 	public class HostState {
 		public string HostName { get; set; }
 		public string IP { get; set; }
-		public DateTimeOffset LatestTaskDownloadTime { get; set; }
+		public Dictionary<string, DateTimeOffset> LatestTaskDownloadTimePerProjectUrl { get; set; } = new();
 		public int TasksStarted { get; set; }
 		public HostStates State { get; set; }
 		public string ErrorMsg { get; set; }

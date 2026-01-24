@@ -1,4 +1,6 @@
 using BoincWatcherService.Data;
+using BoincWatcherService.Services;
+using BoincWatcherService.Services.Interfaces;
 using BoincWatchService.Data;
 using BoincWatchService.Jobs;
 using BoincWatchService.Services;
@@ -10,6 +12,7 @@ using Microsoft.Extensions.Hosting;
 using Quartz;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 
 namespace BoincWatchService {
 	public class Program {
@@ -26,7 +29,7 @@ namespace BoincWatchService {
 			.ConfigureServices((hostContext, services) => {
 				services.Configure<List<BoincHostOptions>>(hostContext.Configuration.GetSection("BoincHosts"));
 				services.Configure<MailOptions>(hostContext.Configuration.GetSection("MailSettings"));
-				services.Configure<DatabaseOptions>(hostContext.Configuration.GetSection("DatabaseSettings"));
+				services.Configure<Options.SchedulingOptions>(hostContext.Configuration.GetSection("SchedulingOptions"));
 				services.Configure<FunctionAppOptions>(hostContext.Configuration.GetSection("FunctionAppSettings"));
 
 				// Register HttpClient
@@ -52,10 +55,11 @@ namespace BoincWatchService {
 				services.AddSingleton<IBoincService, BoincService>();
 				services.AddSingleton<IMailService, MailService>();
 				services.AddScoped<IStatsService, StatsService>();
+				services.AddScoped<IFunctionAppService, FunctionAppService>();
 
 				services.AddQuartz(q => {
 					var mailOptions = hostContext.Configuration.GetSection("MailSettings").Get<MailOptions>();
-					var databaseOptions = hostContext.Configuration.GetSection("DatabaseSettings").Get<DatabaseOptions>();
+					var schedulingOptions = hostContext.Configuration.GetSection("SchedulingOptions").Get<Options.SchedulingOptions>();
 
 					if (mailOptions?.IsEnabled == true) {
 						var mailJobKey = new JobKey("MailNotificationJob");
@@ -66,21 +70,27 @@ namespace BoincWatchService {
 							.WithCronSchedule(mailOptions.CronSchedule ?? "0 0 0 * * ?"));
 					}
 
-					if (databaseOptions?.IsEnabled == true) {
-						var statsJobKey = new JobKey("StatsUploadJob");
-						q.AddJob<FunctionAppUploadJob>(opts => opts.WithIdentity(statsJobKey));
+					var statsJobKey = new JobKey("StatsUploadJob");
+					q.AddJob<StatsJob>(opts => opts.WithIdentity(statsJobKey));
 
+					if (schedulingOptions is null) {
+						throw new InvalidOperationException("DatabaseOptions is not configured.");
+					}
+
+					// Immediate trigger for debugging
+					if (Debugger.IsAttached) {
 						q.AddTrigger(opts => opts
 							.ForJob(statsJobKey)
 							.WithIdentity("StatsUploadJob-immediate-trigger")
 							.StartNow());
-
-						// Trigger on schedule
-						q.AddTrigger(opts => opts
-							.ForJob(statsJobKey)
-							.WithIdentity("StatsUploadJob-trigger")
-							.WithCronSchedule(databaseOptions.CronSchedule ?? "0 0 0 * * ?"));
 					}
+
+					// Trigger on schedule
+					q.AddTrigger(opts => opts
+						.ForJob(statsJobKey)
+						.WithIdentity("StatsUploadJob-trigger")
+						.WithCronSchedule(schedulingOptions.StatsSchedule ?? "0 0 0 * * ?"));
+
 				});
 
 				services.AddQuartzHostedService(q => q.WaitForJobsToComplete = true);
