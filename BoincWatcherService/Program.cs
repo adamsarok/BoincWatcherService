@@ -17,7 +17,21 @@ using System.Diagnostics;
 namespace BoincWatchService {
 	public class Program {
 		public static void Main(string[] args) {
-			CreateHostBuilder(args).Build().Run();
+			var host = CreateHostBuilder(args).Build();
+
+			// Apply pending migrations on startup
+			using (var scope = host.Services.CreateScope()) {
+				var services = scope.ServiceProvider;
+				try {
+					var context = services.GetRequiredService<StatsDbContext>();
+					context.Database.Migrate();
+				} catch (Exception ex) {
+					Console.WriteLine($"An error occurred while migrating the database: {ex.Message}");
+					throw;
+				}
+			}
+
+			host.Run();
 		}
 		public static IHostBuilder CreateHostBuilder(string[] args) =>
 			Host.CreateDefaultBuilder(args)
