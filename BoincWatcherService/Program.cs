@@ -73,23 +73,35 @@ namespace BoincWatchService {
 					var statsJobKey = new JobKey("StatsUploadJob");
 					q.AddJob<StatsJob>(opts => opts.WithIdentity(statsJobKey));
 
+					var tasksJobKey = new JobKey("BoincTaskJob");
+					q.AddJob<BoincTaskJob>(opts => opts.WithIdentity(tasksJobKey));
+
 					if (schedulingOptions is null) {
 						throw new InvalidOperationException("DatabaseOptions is not configured.");
 					}
 
 					// Immediate trigger for debugging
 					if (Debugger.IsAttached) {
+						//q.AddTrigger(opts => opts
+						//	.ForJob(statsJobKey)
+						//	.WithIdentity($"{statsJobKey}-immediate-trigger")
+						//	.StartNow());
 						q.AddTrigger(opts => opts
-							.ForJob(statsJobKey)
-							.WithIdentity("StatsUploadJob-immediate-trigger")
+							.ForJob(tasksJobKey)
+							.WithIdentity($"{tasksJobKey}-immediate-trigger")
 							.StartNow());
 					}
+
 
 					// Trigger on schedule
 					q.AddTrigger(opts => opts
 						.ForJob(statsJobKey)
-						.WithIdentity("StatsUploadJob-trigger")
+						.WithIdentity($"{statsJobKey}-trigger")
 						.WithCronSchedule(schedulingOptions.StatsSchedule ?? "0 0 0 * * ?"));
+					q.AddTrigger(opts => opts
+						.ForJob(tasksJobKey)
+						.WithIdentity($"{tasksJobKey}-trigger")
+						.WithCronSchedule(schedulingOptions.BoincTaskSchedule ?? "0 0/5 * * * ?"));
 
 				});
 

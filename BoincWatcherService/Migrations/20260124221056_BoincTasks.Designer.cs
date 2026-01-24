@@ -3,6 +3,7 @@ using System;
 using BoincWatchService.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace BoincWatcherService.Migrations
 {
     [DbContext(typeof(StatsDbContext))]
-    partial class StatsDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260124221056_BoincTasks")]
+    partial class BoincTasks
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -33,19 +36,7 @@ namespace BoincWatcherService.Migrations
                     b.Property<string>("HostName")
                         .HasColumnType("text");
 
-                    b.Property<TimeSpan>("CurrentCpuTime")
-                        .HasColumnType("interval");
-
-                    b.Property<TimeSpan>("ElapsedTime")
-                        .HasColumnType("interval");
-
-                    b.Property<TimeSpan>("EstimatedCpuTimeRemaining")
-                        .HasColumnType("interval");
-
-                    b.Property<double>("FractionDone")
-                        .HasColumnType("double precision");
-
-                    b.Property<DateTimeOffset>("ReceivedTime")
+                    b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime>("UpdatedAt")
