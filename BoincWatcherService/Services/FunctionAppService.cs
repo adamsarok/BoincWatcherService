@@ -1,4 +1,4 @@
-﻿﻿using BoincWatcherService.Services.Interfaces;
+﻿using BoincWatcherService.Services.Interfaces;
 using Common.Models;
 using Microsoft.Extensions.Logging;
 using System;

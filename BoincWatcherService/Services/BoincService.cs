@@ -57,8 +57,7 @@ namespace BoincWatchService.Services {
 			if (stats.Results.Any()) {
 				result.LatestTaskDownloadTimePerProjectUrl = stats.Results
 					.GroupBy(key => key.ProjectUrl)
-					.Select(g => new { ProjectUrl = g.Key, MaxReceivedTime = g.Max(o => o.ReceivedTime) })
-					.ToDictionary(key => key.ProjectUrl, value => value.MaxReceivedTime);
+					.ToDictionary(key => key.Key, value => value.Max(m => m.ReceivedTime));
 				result.State = HostStates.NoRunningTasks;
 				if (result.TasksStarted > 0) result.State = HostStates.OK;
 			} else result.State = HostStates.NoTasks;

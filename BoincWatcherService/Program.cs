@@ -29,7 +29,7 @@ namespace BoincWatchService {
 			.ConfigureServices((hostContext, services) => {
 				services.Configure<List<BoincHostOptions>>(hostContext.Configuration.GetSection("BoincHosts"));
 				services.Configure<MailOptions>(hostContext.Configuration.GetSection("MailSettings"));
-				services.Configure<DatabaseOptions>(hostContext.Configuration.GetSection("DatabaseSettings"));
+				services.Configure<Options.SchedulingOptions>(hostContext.Configuration.GetSection("SchedulingOptions"));
 				services.Configure<FunctionAppOptions>(hostContext.Configuration.GetSection("FunctionAppSettings"));
 
 				// Register HttpClient
@@ -59,7 +59,7 @@ namespace BoincWatchService {
 
 				services.AddQuartz(q => {
 					var mailOptions = hostContext.Configuration.GetSection("MailSettings").Get<MailOptions>();
-					var databaseOptions = hostContext.Configuration.GetSection("DatabaseSettings").Get<DatabaseOptions>();
+					var schedulingOptions = hostContext.Configuration.GetSection("SchedulingOptions").Get<Options.SchedulingOptions>();
 
 					if (mailOptions?.IsEnabled == true) {
 						var mailJobKey = new JobKey("MailNotificationJob");
@@ -73,7 +73,7 @@ namespace BoincWatchService {
 					var statsJobKey = new JobKey("StatsUploadJob");
 					q.AddJob<StatsJob>(opts => opts.WithIdentity(statsJobKey));
 
-					if (databaseOptions is null) {
+					if (schedulingOptions is null) {
 						throw new InvalidOperationException("DatabaseOptions is not configured.");
 					}
 
@@ -89,7 +89,7 @@ namespace BoincWatchService {
 					q.AddTrigger(opts => opts
 						.ForJob(statsJobKey)
 						.WithIdentity("StatsUploadJob-trigger")
-						.WithCronSchedule(databaseOptions.CronSchedule ?? "0 0 0 * * ?"));
+						.WithCronSchedule(schedulingOptions.StatsSchedule ?? "0 0 0 * * ?"));
 
 				});
 
