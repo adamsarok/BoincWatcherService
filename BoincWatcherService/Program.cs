@@ -77,7 +77,7 @@ namespace BoincWatchService {
 					q.AddJob<BoincTaskJob>(opts => opts.WithIdentity(tasksJobKey));
 
 					if (schedulingOptions is null) {
-						throw new InvalidOperationException("DatabaseOptions is not configured.");
+						throw new InvalidOperationException("SchedulingOptions is not configured.");
 					}
 
 					// Immediate trigger for debugging
