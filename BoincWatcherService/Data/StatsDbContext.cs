@@ -11,6 +11,7 @@ public class StatsDbContext : DbContext {
 	public DbSet<HostProjectStats> HostProjectStats { get; set; } = null!;
 	public DbSet<ProjectStats> ProjectStats { get; set; } = null!;
 	public DbSet<BoincTask> BoincTasks { get; set; } = null!;
+	public DbSet<BoincApp> BoincApps { get; set; } = null!;
 	protected override void OnModelCreating(ModelBuilder modelBuilder) {
 		base.OnModelCreating(modelBuilder);
 
@@ -31,6 +32,10 @@ public class StatsDbContext : DbContext {
 
 		modelBuilder.Entity<BoincTask>()
 			.HasKey(x => new { x.ProjectName, x.TaskName, x.HostName });
+
+		modelBuilder.Entity<BoincApp>()
+			.HasKey(x => new { x.ProjectName, x.Name });
+
 
 	}
 }

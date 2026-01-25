@@ -6,6 +6,7 @@ public class BoincTask {
 	public string ProjectName { get; set; } = string.Empty;
 	public string TaskName { get; set; } = string.Empty;
 	public string HostName { get; set; } = string.Empty;
+	public string AppName { get; set; } = string.Empty;
 	public DateTime UpdatedAt { get; set; }
 	public TimeSpan CurrentCpuTime { get; internal set; }
 	public TimeSpan EstimatedCpuTimeRemaining { get; internal set; }
