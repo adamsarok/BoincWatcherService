@@ -9,8 +9,10 @@ public class BoincTask {
 	public string AppName { get; set; } = string.Empty;
 	public DateTime UpdatedAt { get; set; }
 	public TimeSpan CurrentCpuTime { get; internal set; }
+	public TimeSpan FinalCpuTime { get; internal set; }
 	public TimeSpan EstimatedCpuTimeRemaining { get; internal set; }
 	public TimeSpan ElapsedTime { get; internal set; }
+	public TimeSpan FinalElapsedTime { get; internal set; }
 	public double FractionDone { get; internal set; }
 	public DateTimeOffset ReceivedTime { get; internal set; }
 }

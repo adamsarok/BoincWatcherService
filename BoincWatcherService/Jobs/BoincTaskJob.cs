@@ -63,8 +63,12 @@ public class BoincTaskJob(ILogger<BoincTaskJob> logger,
 	private IEnumerable<BoincTask> GetRunningTasks(HostState hostState) {
 		var projectDict = hostState.CoreClientState.Projects.ToDictionary(x => x.MasterUrl);
 		var wus = hostState.CoreClientState.Workunits.ToDictionary(x => (x.ProjectUrl, x.Name));
-
-		foreach (var result in hostState.CoreClientState.Results) {
+		// BOINC RPC is very weird - tasks get reported as Unitialized with zero CPU time and elapsed time before uploading, but also Suspended tasks are reported as Uninitialized.
+		// Tasks which are actually uninitialized are reported as Unitialized however they have FinalCpuTime and FinalElapsedTime, most likely an estimate
+		// In completed tasks FinalCpuTime and FinalElapsedTime seems to match, right until they are uploaded when they are set to zero.
+		// Best bet is to only track tasks with non-zero ElapsedTime or CurrentCpuTime, otherwise valid runtimes will be overwritten with zeros before upload.
+		foreach (var result in hostState.CoreClientState.Results.Where(
+			x => x.ElapsedTime > TimeSpan.Zero || x.CurrentCpuTime > TimeSpan.Zero)) {
 			wus.TryGetValue((result.ProjectUrl, result.WorkunitName), out var wu);
 			projectDict.TryGetValue(result.ProjectUrl, out var project);
 			yield return new BoincTask {
@@ -77,7 +81,9 @@ public class BoincTaskJob(ILogger<BoincTaskJob> logger,
 				ElapsedTime = result.ElapsedTime,
 				FractionDone = result.FractionDone,
 				ReceivedTime = result.ReceivedTime,
-				UpdatedAt = DateTime.UtcNow
+				UpdatedAt = DateTime.UtcNow,
+				FinalCpuTime = result.FinalCpuTime,
+				FinalElapsedTime = result.FinalElapsedTime
 			};
 		}
 	}
