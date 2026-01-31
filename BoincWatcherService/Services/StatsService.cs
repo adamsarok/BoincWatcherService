@@ -114,26 +114,29 @@ public class StatsService(
 
 			var today = DateTime.UtcNow.Date;
 
-			// Aggregate HostStats
-			var hostStatsAggregated = await AggregateHostStats(today, cancellationToken);
-
-			// Aggregate ProjectStats
-			var projectStatsAggregated = await AggregateProjectStats(today, cancellationToken);
-
 			// Upload to function app
 			var httpClient = httpClientFactory.CreateClient();
 			var success = true;
 
+			var hostStatsAggregated = await AggregateHostStats(today, cancellationToken);
 			foreach (var hostStat in hostStatsAggregated) {
 				if (!await functionAppService.UploadStatsToFunctionApp(httpClient, hostStat, cancellationToken)) {
 					success = false;
 				}
 			}
 
+			var projectStatsAggregated = await AggregateProjectStats(today, cancellationToken);
 			foreach (var projectStat in projectStatsAggregated) {
 				if (!await functionAppService.UploadStatsToFunctionApp(httpClient, projectStat, cancellationToken)) {
 					success = false;
 				}
+			}
+
+			var resultStatsAggregated = await AggregateResultStats(today, cancellationToken);
+			foreach (var resultStat in resultStatsAggregated) {
+				//if (!await functionAppService.UploadStatsToFunctionApp(httpClient, resultStat, cancellationToken)) {
+				//	success = false;
+				//}
 			}
 
 			if (success) {
@@ -146,6 +149,55 @@ public class StatsService(
 			logger.LogError(ex, "Error upserting aggregate stats");
 			return false;
 		}
+	}
+
+	private async Task<List<ResultsTableEntity>> AggregateResultStats(DateTime today,
+		CancellationToken cancellationToken) {
+		var weekStart = today.AddDays(-(int)today.DayOfWeek);
+		var monthStart = new DateTime(today.Year, today.Month, 1);
+		var yearStart = new DateTime(today.Year, 1, 1);
+
+		var todayResults = await GetResultsAggregateAfter(today, cancellationToken);
+		var weekResults = await GetResultsAggregateAfter(weekStart, cancellationToken);
+		var monthResults = await GetResultsAggregateAfter(monthStart, cancellationToken);
+		var yearResults = await GetResultsAggregateAfter(yearStart, cancellationToken);
+		var allTimeStats = await GetResultsAggregateAfter(DateTime.MinValue, cancellationToken);
+		var resultDict = new Dictionary<(string HostName, string ProjectName, string AppName), ResultsTableEntity>();
+		foreach (var row in allTimeStats) {
+			resultDict.Add((row.HostName, row.ProjectName, row.AppName), new ResultsTableEntity(row.HostName, row.ProjectName, row.AppName) {
+				CPUHoursTotal = row.CPUHours
+			});
+		}
+		foreach (var row in yearResults) {
+			resultDict[(row.HostName, row.ProjectName, row.AppName)].CPUHoursThisYear = row.CPUHours;
+		}
+		foreach (var row in monthResults) {
+			resultDict[(row.HostName, row.ProjectName, row.AppName)].CPUHoursThisMonth = row.CPUHours;
+		}
+		foreach (var row in weekResults) {
+			resultDict[(row.HostName, row.ProjectName, row.AppName)].CPUHoursThisWeek = row.CPUHours;
+		}
+		foreach (var row in todayResults) {
+			resultDict[(row.HostName, row.ProjectName, row.AppName)].CPUHoursToday = row.CPUHours;
+		}
+		return resultDict.Values.ToList();
+	}
+
+	private record ResultsAggregate(string HostName, string ProjectName, string AppName, double CPUHours);
+	private async Task<IEnumerable<ResultsAggregate>> GetResultsAggregateAfter(DateTime fromDate,
+		CancellationToken cancellationToken) {
+		var fromDateUtc = DateTime.SpecifyKind(fromDate, DateTimeKind.Utc);
+		return await dbContext.BoincTasks
+			.Where(r => r.UpdatedAt >= fromDateUtc)
+			.GroupBy(r => new { r.HostName, r.ProjectName, r.AppName })
+			.Select(x => new ResultsAggregate(
+				x.Key.HostName,
+				x.Key.ProjectName,
+				x.Key.AppName,
+				x.Sum(r => r.CurrentCpuTime.TotalHours))
+			)
+			.AsNoTracking()
+			.ToListAsync(cancellationToken);
 	}
 
 	private async Task<List<StatsTableEntity>> AggregateHostStats(
