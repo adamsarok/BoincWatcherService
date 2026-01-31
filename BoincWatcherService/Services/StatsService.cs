@@ -134,9 +134,9 @@ public class StatsService(
 
 			var resultStatsAggregated = await AggregateResultStats(today, cancellationToken);
 			foreach (var resultStat in resultStatsAggregated) {
-				//if (!await functionAppService.UploadStatsToFunctionApp(httpClient, resultStat, cancellationToken)) {
-				//	success = false;
-				//}
+				if (!await functionAppService.UploadAppRuntimeToFunctionApp(httpClient, resultStat, cancellationToken)) {
+					success = false;
+				}
 			}
 
 			if (success) {
@@ -151,7 +151,7 @@ public class StatsService(
 		}
 	}
 
-	private async Task<List<ResultsTableEntity>> AggregateResultStats(DateTime today,
+	private async Task<List<AppRuntimeTableEntity>> AggregateResultStats(DateTime today,
 		CancellationToken cancellationToken) {
 		var weekStart = today.AddDays(-(int)today.DayOfWeek);
 		var monthStart = new DateTime(today.Year, today.Month, 1);
@@ -162,9 +162,9 @@ public class StatsService(
 		var monthResults = await GetResultsAggregateAfter(monthStart, cancellationToken);
 		var yearResults = await GetResultsAggregateAfter(yearStart, cancellationToken);
 		var allTimeStats = await GetResultsAggregateAfter(DateTime.MinValue, cancellationToken);
-		var resultDict = new Dictionary<(string HostName, string ProjectName, string AppName), ResultsTableEntity>();
+		var resultDict = new Dictionary<(string HostName, string ProjectName, string AppName), AppRuntimeTableEntity>();
 		foreach (var row in allTimeStats) {
-			resultDict.Add((row.HostName, row.ProjectName, row.AppName), new ResultsTableEntity(row.HostName, row.ProjectName, row.AppName) {
+			resultDict.Add((row.HostName, row.ProjectName, row.AppName), new AppRuntimeTableEntity(row.HostName, row.ProjectName, row.AppName) {
 				CPUHoursTotal = row.CPUHours
 			});
 		}

@@ -3,8 +3,9 @@ using Azure.Data.Tables;
 
 namespace Common.Models;
 
-public class ResultsTableEntity : ITableEntity {
-	public ResultsTableEntity(string hostName, string projectName, string appName) {
+public class AppRuntimeTableEntity : ITableEntity {
+	public AppRuntimeTableEntity() { }
+	public AppRuntimeTableEntity(string hostName, string projectName, string appName) {
 		PartitionKey = hostName;
 		RowKey = $"{projectName}|{appName}";
 	}
