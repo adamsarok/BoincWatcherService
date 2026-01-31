@@ -13,6 +13,40 @@ public class FunctionAppService(
 	IOptions<FunctionAppOptions> functionAppOptions,
 	ILogger<FunctionAppService> logger) : IFunctionAppService {
 	public bool IsEnabled => functionAppOptions?.Value?.IsEnabled ?? false;
+
+	public async Task<bool> UploadAppRuntimeToFunctionApp(HttpClient httpClient, AppRuntimeTableEntity entity, CancellationToken cancellationToken) {
+		if (functionAppOptions is null) {
+			throw new ArgumentNullException(nameof(functionAppOptions));
+		}
+		if (string.IsNullOrEmpty(functionAppOptions.Value.BaseUrl)) {
+			throw new InvalidOperationException("BaseUrl is not configured.");
+		}
+		try {
+			var url = $"{functionAppOptions.Value.BaseUrl.TrimEnd('/')}/api/appruntimes";
+			using var request = new HttpRequestMessage(HttpMethod.Put, url) {
+				Content = JsonContent.Create(entity)
+			};
+
+			if (!string.IsNullOrEmpty(functionAppOptions.Value.FunctionKey)) {
+				request.Headers.Add("x-functions-key", functionAppOptions.Value.FunctionKey);
+			}
+
+			using var response = await httpClient.SendAsync(request, cancellationToken);
+
+			if (response.IsSuccessStatusCode) {
+				logger.LogDebug("Successfully uploaded app runtimes for {PartitionKey}/{RowKey}", entity.PartitionKey, entity.RowKey);
+				return true;
+			} else {
+				logger.LogWarning("Failed to upload app runtimes for {PartitionKey}/{RowKey}. Status: {StatusCode}",
+					entity.PartitionKey, entity.RowKey, response.StatusCode);
+				return false;
+			}
+		} catch (Exception ex) {
+			logger.LogError(ex, "Error uploading app runtimes for {PartitionKey}/{RowKey}", entity.PartitionKey, entity.RowKey);
+			return false;
+		}
+	}
+
 	public async Task<bool> UploadStatsToFunctionApp(HttpClient httpClient, StatsTableEntity stats, CancellationToken cancellationToken) {
 		if (functionAppOptions is null) {
 			throw new ArgumentNullException(nameof(functionAppOptions));

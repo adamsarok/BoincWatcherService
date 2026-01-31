@@ -96,10 +96,10 @@ namespace BoincWatchService {
 
 					// Immediate trigger for debugging
 					if (Debugger.IsAttached) {
-						//q.AddTrigger(opts => opts
-						//	.ForJob(statsJobKey)
-						//	.WithIdentity($"{statsJobKey}-immediate-trigger")
-						//	.StartNow());
+						q.AddTrigger(opts => opts
+							.ForJob(statsJobKey)
+							.WithIdentity($"{statsJobKey}-immediate-trigger")
+							.StartNow());
 						q.AddTrigger(opts => opts
 							.ForJob(tasksJobKey)
 							.WithIdentity($"{tasksJobKey}-immediate-trigger")
