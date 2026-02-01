@@ -79,4 +79,37 @@ public class FunctionAppService(
 			return false;
 		}
 	}
+
+	public async Task<bool> UploadEfficiencyToFunctionApp(HttpClient httpClient, EfficiencyTableEntity efficiency, CancellationToken cancellationToken) {
+		if (functionAppOptions is null) {
+			throw new ArgumentNullException(nameof(functionAppOptions));
+		}
+		if (string.IsNullOrEmpty(functionAppOptions.Value.BaseUrl)) {
+			throw new InvalidOperationException("BaseUrl is not configured.");
+		}
+		try {
+			var url = $"{functionAppOptions.Value.BaseUrl.TrimEnd('/')}/api/efficiency";
+			using var request = new HttpRequestMessage(HttpMethod.Put, url) {
+				Content = JsonContent.Create(efficiency)
+			};
+
+			if (!string.IsNullOrEmpty(functionAppOptions.Value.FunctionKey)) {
+				request.Headers.Add("x-functions-key", functionAppOptions.Value.FunctionKey);
+			}
+
+			using var response = await httpClient.SendAsync(request, cancellationToken);
+
+			if (response.IsSuccessStatusCode) {
+				logger.LogDebug("Successfully uploaded efficiency for {PartitionKey}/{RowKey}", efficiency.PartitionKey, efficiency.RowKey);
+				return true;
+			} else {
+				logger.LogWarning("Failed to upload efficiency for {PartitionKey}/{RowKey}. Status: {StatusCode}",
+					efficiency.PartitionKey, efficiency.RowKey, response.StatusCode);
+				return false;
+			}
+		} catch (Exception ex) {
+			logger.LogError(ex, "Error uploading efficiency for {PartitionKey}/{RowKey}", efficiency.PartitionKey, efficiency.RowKey);
+			return false;
+		}
+	}
 }

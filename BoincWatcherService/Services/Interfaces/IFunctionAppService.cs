@@ -8,5 +8,6 @@ namespace BoincWatcherService.Services.Interfaces;
 public interface IFunctionAppService {
 	Task<bool> UploadStatsToFunctionApp(HttpClient httpClient, StatsTableEntity stats, CancellationToken cancellationToken);
 	Task<bool> UploadAppRuntimeToFunctionApp(HttpClient httpClient, AppRuntimeTableEntity runtime, CancellationToken cancellationToken);
+	Task<bool> UploadEfficiencyToFunctionApp(HttpClient httpClient, EfficiencyTableEntity efficiency, CancellationToken cancellationToken);
 	bool IsEnabled { get; }
 }

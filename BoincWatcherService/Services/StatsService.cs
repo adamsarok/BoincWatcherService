@@ -384,15 +384,11 @@ public class StatsService(
 		foreach (var group in workHours) {
 			if (group.DateFrom.Date == group.DateTo.Date) continue;
 			var startPoints = await context.HostProjectStats.FindAsync(
-				group.DateFrom.ToString("yyyyMMdd"),
-				group.HostName,
-				group.ProjectName,
+				new object[] { group.DateFrom.ToString("yyyyMMdd"), group.HostName, group.ProjectName },
 				cancellationToken);
 			if (startPoints == null) continue;
 			var endPoints = await context.HostProjectStats.FindAsync(
-				group.DateTo.ToString("yyyyMMdd"),
-				group.HostName,
-				group.ProjectName,
+				new object[] { group.DateTo.ToString("yyyyMMdd"), group.HostName, group.ProjectName },
 				cancellationToken);
 			if (endPoints == null) continue;
 			var result = results[(group.HostName, group.ProjectName)];
