@@ -16,7 +16,7 @@ namespace BoincWatchService.Services;
 
 public class StatsService(
 	ILogger<StatsService> logger,
-	StatsDbContext dbContext,
+	StatsDbContext context,
 	IHttpClientFactory httpClientFactory,
 	IFunctionAppService functionAppService) : IStatsService {
 
@@ -27,20 +27,20 @@ public class StatsService(
 				return false;
 			}
 
-			var existingEntity = await dbContext.HostStats
+			var existingEntity = await context.HostStats
 				.FirstOrDefaultAsync(h => h.YYYYMMDD == hostStats.YYYYMMDD && h.HostName == hostStats.HostName, cancellationToken);
 
 			if (existingEntity != null) {
 				existingEntity.TotalCredit = hostStats.TotalCredit;
 				existingEntity.Timestamp = hostStats.Timestamp ?? DateTimeOffset.UtcNow;
 				existingEntity.LatestTaskDownloadTime = hostStats.LatestTaskDownloadTime;
-				dbContext.HostStats.Update(existingEntity);
+				context.HostStats.Update(existingEntity);
 			} else {
 				hostStats.Timestamp = hostStats.Timestamp ?? DateTimeOffset.UtcNow;
-				dbContext.HostStats.Add(hostStats);
+				context.HostStats.Add(hostStats);
 			}
 
-			await dbContext.SaveChangesAsync(cancellationToken);
+			await context.SaveChangesAsync(cancellationToken);
 			logger.LogInformation("Successfully saved host stats for {HostName}", hostStats.HostName);
 			return true;
 		} catch (Exception ex) {
@@ -56,20 +56,20 @@ public class StatsService(
 				return false;
 			}
 
-			var existingEntity = await dbContext.HostProjectStats
+			var existingEntity = await context.HostProjectStats
 				.FirstOrDefaultAsync(h => h.YYYYMMDD == hostProjectStats.YYYYMMDD && h.HostName == hostProjectStats.HostName && h.ProjectName == hostProjectStats.ProjectName, cancellationToken);
 
 			if (existingEntity != null) {
 				existingEntity.TotalCredit = hostProjectStats.TotalCredit;
 				existingEntity.Timestamp = hostProjectStats.Timestamp ?? DateTimeOffset.UtcNow;
 				existingEntity.LatestTaskDownloadTime = hostProjectStats.LatestTaskDownloadTime;
-				dbContext.HostProjectStats.Update(existingEntity);
+				context.HostProjectStats.Update(existingEntity);
 			} else {
 				hostProjectStats.Timestamp = hostProjectStats.Timestamp ?? DateTimeOffset.UtcNow;
-				dbContext.HostProjectStats.Add(hostProjectStats);
+				context.HostProjectStats.Add(hostProjectStats);
 			}
 
-			await dbContext.SaveChangesAsync(cancellationToken);
+			await context.SaveChangesAsync(cancellationToken);
 			logger.LogInformation("Successfully saved host stats for {HostName} - {ProjectName}", hostProjectStats.HostName, hostProjectStats.ProjectName);
 			return true;
 		} catch (Exception ex) {
@@ -85,18 +85,18 @@ public class StatsService(
 				return false;
 			}
 
-			var existingEntity = await dbContext.ProjectStats
+			var existingEntity = await context.ProjectStats
 				.FirstOrDefaultAsync(p => p.YYYYMMDD == projectStats.YYYYMMDD && p.ProjectName == projectStats.ProjectName, cancellationToken);
 
 			if (existingEntity != null) {
 				existingEntity.TotalCredit = projectStats.TotalCredit;
 				existingEntity.LatestTaskDownloadTime = projectStats.LatestTaskDownloadTime;
-				dbContext.ProjectStats.Update(existingEntity);
+				context.ProjectStats.Update(existingEntity);
 			} else {
-				dbContext.ProjectStats.Add(projectStats);
+				context.ProjectStats.Add(projectStats);
 			}
 
-			await dbContext.SaveChangesAsync(cancellationToken);
+			await context.SaveChangesAsync(cancellationToken);
 			logger.LogInformation("Successfully saved project stats for {ProjectName}", projectStats.ProjectName);
 			return true;
 		} catch (Exception ex) {
@@ -135,6 +135,13 @@ public class StatsService(
 			var resultStatsAggregated = await AggregateResultStats(today, cancellationToken);
 			foreach (var resultStat in resultStatsAggregated) {
 				if (!await functionAppService.UploadAppRuntimeToFunctionApp(httpClient, resultStat, cancellationToken)) {
+					success = false;
+				}
+			}
+
+			var efficiencyStatsAggregated = await AggregateEfficiencyStats(today, cancellationToken);
+			foreach (var efficiencyStat in efficiencyStatsAggregated) {
+				if (!await functionAppService.UploadEfficiencyToFunctionApp(httpClient, efficiencyStat, cancellationToken)) {
 					success = false;
 				}
 			}
@@ -187,7 +194,7 @@ public class StatsService(
 	private async Task<IEnumerable<ResultsAggregate>> GetResultsAggregateAfter(DateTime fromDate,
 		CancellationToken cancellationToken) {
 		var fromDateUtc = DateTime.SpecifyKind(fromDate, DateTimeKind.Utc);
-		return await dbContext.BoincTasks
+		return await context.BoincTasks
 			.Where(r => r.UpdatedAt >= fromDateUtc)
 			.GroupBy(r => new { r.HostName, r.ProjectName, r.AppName })
 			.Select(x => new ResultsAggregate(
@@ -210,7 +217,7 @@ public class StatsService(
 		var yearStart = new DateTime(today.Year, 1, 1);
 
 		// Get latest stats for each project using raw SQL
-		var latestStats = await dbContext.HostStats
+		var latestStats = await context.HostStats
 			.FromSqlRaw(@"
 				SELECT p.*
 				FROM ""HostStats"" p
@@ -257,7 +264,7 @@ public class StatsService(
 	}
 	private async Task<List<(string HostName, double TotalCredit)>> GetEarliestHostStatAfter(DateTime fromDate,
 	CancellationToken cancellationToken) {
-		var results = await dbContext.HostStats
+		var results = await context.HostStats
 			.FromSqlRaw(@"
 				SELECT p.*
 				FROM ""HostStats"" p
@@ -277,7 +284,7 @@ public class StatsService(
 	}
 	private async Task<List<(string ProjectName, double TotalCredit)>> GetEarliestProjectStatAfter(DateTime fromDate,
 		CancellationToken cancellationToken) {
-		var results = await dbContext.ProjectStats
+		var results = await context.ProjectStats
 			.FromSqlRaw(@"
 				SELECT p.*
 				FROM ""ProjectStats"" p
@@ -305,7 +312,7 @@ public class StatsService(
 		var yearStart = new DateTime(today.Year, 1, 1);
 
 		// Get latest stats for each project using raw SQL
-		var latestStats = await dbContext.ProjectStats
+		var latestStats = await context.ProjectStats
 			.FromSqlRaw(@"
 				SELECT p.*
 				FROM ""ProjectStats"" p
@@ -349,5 +356,51 @@ public class StatsService(
 		}
 
 		return latestStats.Values.ToList();
+	}
+
+	private async Task<List<EfficiencyTableEntity>> AggregateEfficiencyStats(
+		DateTime today,
+		CancellationToken cancellationToken) {
+
+		Dictionary<(string HostName, string ProjectName), EfficiencyTableEntity> results = new();
+		var workHours = await context.BoincTasks
+			.Where(w => w.ProjectName != "WUProp@Home")
+			.GroupBy(t => new { t.HostName, t.ProjectName })
+			.Select(g => new {
+				g.Key.HostName,
+				g.Key.ProjectName,
+				DateFrom = g.Min(m => m.UpdatedAt),
+				DateTo = g.Max(m => m.UpdatedAt),
+				TotalCpuTimeHours = g.Sum(x => x.CurrentCpuTime.TotalHours)
+			})
+			.ToListAsync(cancellationToken);
+
+		foreach (var group in workHours) {
+			results.Add((group.HostName, group.ProjectName), new EfficiencyTableEntity(group.HostName, group.ProjectName) {
+				CPUHoursTotal = group.TotalCpuTimeHours
+			});
+		}
+
+		foreach (var group in workHours) {
+			if (group.DateFrom.Date == group.DateTo.Date) continue;
+			var startPoints = await context.HostProjectStats.FindAsync(
+				group.DateFrom.ToString("yyyyMMdd"),
+				group.HostName,
+				group.ProjectName,
+				cancellationToken);
+			if (startPoints == null) continue;
+			var endPoints = await context.HostProjectStats.FindAsync(
+				group.DateTo.ToString("yyyyMMdd"),
+				group.HostName,
+				group.ProjectName,
+				cancellationToken);
+			if (endPoints == null) continue;
+			var result = results[(group.HostName, group.ProjectName)];
+			result.CPUHoursTotal = group.TotalCpuTimeHours;
+			result.PointsTotal = endPoints.TotalCredit - startPoints.TotalCredit;
+			result.PointsPerCPUHour = group.TotalCpuTimeHours != 0 ? (endPoints.TotalCredit - startPoints.TotalCredit) / group.TotalCpuTimeHours : 0;
+		}
+
+		return results.Values.ToList();
 	}
 }
