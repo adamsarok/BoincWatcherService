@@ -55,8 +55,8 @@ public class AppRuntimes {
 		}
 	}
 
-	[Function("PutStats")]
-	public async Task<IActionResult> PutStats(
+	[Function("PutAppRuntime")]
+	public async Task<IActionResult> PutAppRuntime(
 		[HttpTrigger(AuthorizationLevel.Function, "put", Route = "appruntimes")] HttpRequest req) {
 		try {
 			var runtime = await JsonSerializer.DeserializeAsync<AppRuntimeTableEntity>(req.Body, new JsonSerializerOptions {
