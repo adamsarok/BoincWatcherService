@@ -56,7 +56,7 @@ public class StatsJob : IJob {
 			}
 		} catch (Exception ex) {
 			_logger.LogError(ex, "Error occurred during StatsJob execution");
-			// Don't rethrow - allow Quartz to continue scheduling
+			throw;
 		}
 	}
 	private HostStats MapHostStatsToDto(HostState hostState, string partitionKey) {
