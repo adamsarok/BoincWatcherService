@@ -1,6 +1,8 @@
 ﻿using BoincRpc;
 using BoincWatchService.Services.Interfaces;
+using BoincWatcherService.Services.Interfaces;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -11,10 +13,12 @@ namespace BoincWatchService.Services {
 	public class BoincService : IBoincService {
 		private readonly List<BoincHostOptions> hosts;
 		private readonly ILogger<BoincService> logger;
+		private readonly IRpcClientFactory rpcClientFactory;
 
-		public BoincService(IOptions<List<BoincHostOptions>> hosts, ILogger<BoincService> logger) {
+		public BoincService(IOptions<List<BoincHostOptions>> hosts, ILogger<BoincService> logger, IRpcClientFactory rpcClientFactory) {
 			this.hosts = hosts.Value;
 			this.logger = logger;
+			this.rpcClientFactory = rpcClientFactory;
 		}
 
 
@@ -26,7 +30,7 @@ namespace BoincWatchService.Services {
 				};
 				RpcClient client = null;
 				try {
-					client = new RpcClient();
+					client = rpcClientFactory.Create();
 					await client.ConnectAsync(host.IP, host.Port);
 					await UpdateHostData(host, client, result);
 				} catch (Exception ex) {

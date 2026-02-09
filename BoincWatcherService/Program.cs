@@ -66,6 +66,7 @@ namespace BoincWatchService {
 
 				});
 
+				services.AddSingleton<IRpcClientFactory, RpcClientFactory>();
 				services.AddSingleton<IBoincService, BoincService>();
 				services.AddSingleton<IMailService, MailService>();
 				services.AddScoped<IStatsService, StatsService>();

@@ -26,33 +26,37 @@ public class StatsJob : IJob {
 	}
 
 	public async Task Execute(IJobExecutionContext context) {
+		try {
+			string yyyymmdd = DateTime.UtcNow.ToString("yyyyMMdd");
+			_logger.LogInformation("Stats upload job running at: {time}", DateTimeOffset.Now);
 
-		string yyyymmdd = DateTime.UtcNow.ToString("yyyyMMdd");
-		_logger.LogInformation("Stats upload job running at: {time}", DateTimeOffset.Now);
+			var st = await _boincService.GetHostStates();
 
-		var st = await _boincService.GetHostStates();
+			var aliveHosts = st.Where(x => x.State != HostStates.Down).ToList();
 
-		var aliveHosts = st.Where(x => x.State != HostStates.Down).ToList();
-
-		foreach (var hostState in aliveHosts) {
-			var hostStats = MapHostStatsToDto(hostState, yyyymmdd);
-			await _statsService.UpsertHostStats(hostStats, context.CancellationToken);
-			var hostProjectStats = MapHostProjectStatsToDto(hostState, yyyymmdd);
-			foreach (var hostProjectStat in hostProjectStats) {
-				await _statsService.UpsertHostProjectStats(hostProjectStat, context.CancellationToken);
+			foreach (var hostState in aliveHosts) {
+				var hostStats = MapHostStatsToDto(hostState, yyyymmdd);
+				await _statsService.UpsertHostStats(hostStats, context.CancellationToken);
+				var hostProjectStats = MapHostProjectStatsToDto(hostState, yyyymmdd);
+				foreach (var hostProjectStat in hostProjectStats) {
+					await _statsService.UpsertHostProjectStats(hostProjectStat, context.CancellationToken);
+				}
 			}
-		}
 
-		if (aliveHosts.Any()) {
-			var projectStats = MapToProjectStatsTableEntities(aliveHosts, yyyymmdd).ToList();
-			foreach (var projectStat in projectStats) {
-				await _statsService.UpsertProjectStats(projectStat, context.CancellationToken);
+			if (aliveHosts.Any()) {
+				var projectStats = MapToProjectStatsTableEntities(aliveHosts, yyyymmdd).ToList();
+				foreach (var projectStat in projectStats) {
+					await _statsService.UpsertProjectStats(projectStat, context.CancellationToken);
+				}
+				_logger.LogInformation("Uploaded stats for {hostCount} hosts and {projectCount} projects",
+					aliveHosts.Count, projectStats.Count);
+
+				// Upload aggregate stats to function app
+				await _statsService.UpsertAggregateStats(context.CancellationToken);
 			}
-			_logger.LogInformation("Uploaded stats for {hostCount} hosts and {projectCount} projects",
-				aliveHosts.Count, projectStats.Count);
-
-			// Upload aggregate stats to function app
-			await _statsService.UpsertAggregateStats(context.CancellationToken);
+		} catch (Exception ex) {
+			_logger.LogError(ex, "Error occurred during StatsJob execution");
+			// Don't rethrow - allow Quartz to continue scheduling
 		}
 	}
 	private HostStats MapHostStatsToDto(HostState hostState, string partitionKey) {
