@@ -1,6 +1,5 @@
 using BoincRpc;
 using BoincWatchService.Services;
-using NSubstitute;
 using static BoincWatchService.Services.HostState;
 
 namespace BoincWatcherService.Tests.Helpers;
@@ -64,13 +63,12 @@ public class HostStateBuilder
 
         if (_state != HostStates.Down && (_projects.Any() || _results.Any()))
         {
-            var hostInfo = Substitute.For<HostInfo>();
-            hostInfo.DomainName.Returns(_hostName);
+            var hostInfo = BoincRpcFactory.CreateHostInfo(_hostName);
 
-            var coreClientState = Substitute.For<CoreClientState>();
-            coreClientState.HostInfo.Returns(hostInfo);
-            coreClientState.Projects.Returns(_projects);
-            coreClientState.Results.Returns(_results);
+            var coreClientState = BoincRpcFactory.CreateCoreClientState(
+                hostInfo: hostInfo,
+                projects: _projects,
+                results: _results);
 
             hostState.CoreClientState = coreClientState;
 
@@ -87,20 +85,11 @@ public class HostStateBuilder
 
     public static Project CreateProject(string name, string masterUrl, double userTotalCredit = 1000, double hostTotalCredit = 500)
     {
-        var project = Substitute.For<Project>();
-        project.ProjectName.Returns(name);
-        project.MasterUrl.Returns(masterUrl);
-        project.UserTotalCredit.Returns(userTotalCredit);
-        project.HostTotalCredit.Returns(hostTotalCredit);
-        return project;
+        return BoincRpcFactory.CreateProject(name, masterUrl, userTotalCredit, hostTotalCredit);
     }
 
     public static Result CreateResult(string projectUrl, DateTimeOffset receivedTime)
     {
-        var result = Substitute.For<Result>();
-        result.ProjectUrl.Returns(projectUrl);
-        result.ReceivedTime.Returns(receivedTime);
-        result.CurrentCpuTime.Returns(TimeSpan.FromSeconds(100));
-        return result;
+        return BoincRpcFactory.CreateResult(projectUrl: projectUrl, receivedTime: receivedTime);
     }
 }

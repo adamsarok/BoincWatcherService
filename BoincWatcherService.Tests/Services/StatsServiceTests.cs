@@ -3,6 +3,7 @@ using BoincWatcherService.Services.Interfaces;
 using BoincWatchService.Data;
 using BoincWatchService.Services;
 using FluentAssertions;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
@@ -21,11 +22,16 @@ public class StatsServiceTests
 
         functionAppService.IsEnabled.Returns(true);
 
+        // Use SQLite in-memory because UpsertAggregateStats uses FromSqlRaw
+        var connection = new SqliteConnection("DataSource=:memory:");
+        connection.Open();
+
         var options = new DbContextOptionsBuilder<StatsDbContext>()
-            .UseInMemoryDatabase(databaseName: $"TestDb_{Guid.NewGuid()}")
+            .UseSqlite(connection)
             .Options;
 
         await using var context = new StatsDbContext(options);
+        await context.Database.EnsureCreatedAsync();
 
         // Add test data - 3 hosts
         var today = DateTime.UtcNow.Date;
@@ -75,6 +81,8 @@ public class StatsServiceTests
             Arg.Any<HttpClient>(),
             Arg.Any<Common.Models.StatsTableEntity>(),
             Arg.Any<CancellationToken>());
+
+        connection.Close();
     }
 
     [Fact]

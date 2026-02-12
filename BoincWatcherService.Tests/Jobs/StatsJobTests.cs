@@ -1,6 +1,7 @@
 using BoincRpc;
 using BoincWatcherService.Models;
 using BoincWatcherService.Services.Interfaces;
+using BoincWatcherService.Tests.Helpers;
 using BoincWatchService.Data;
 using BoincWatchService.Jobs;
 using BoincWatchService.Services;
@@ -79,7 +80,7 @@ public class StatsJobTests {
 	}
 
 	[Fact]
-	public async Task Execute_WhenDatabaseUpsertFails_JobCompletesWithoutThrowing() {
+	public async Task Execute_WhenDatabaseUpsertFails_ThrowsAndLogsError() {
 		// Arrange
 		var logger = Substitute.For<ILogger<StatsJob>>();
 		var boincService = Substitute.For<IBoincService>();
@@ -107,11 +108,11 @@ public class StatsJobTests {
 		var jobContext = Substitute.For<IJobExecutionContext>();
 		jobContext.CancellationToken.Returns(CancellationToken.None);
 
-		// Act & Assert - Should not throw
+		// Act & Assert - Should rethrow so Quartz knows the job failed
 		var act = () => job.Execute(jobContext);
-		await act.Should().NotThrowAsync();
+		await act.Should().ThrowAsync<Exception>().WithMessage("Database connection failed");
 
-		// Verify error was logged
+		// Verify error was logged before rethrowing
 		logger.Received(1).Log(
 			LogLevel.Error,
 			Arg.Any<EventId>(),
@@ -232,7 +233,7 @@ public class StatsJobTests {
 	}
 
 	[Fact]
-	public async Task Execute_WhenBoincServiceThrows_JobCompletesWithoutThrowing() {
+	public async Task Execute_WhenBoincServiceThrows_ThrowsAndLogsError() {
 		// Arrange
 		var logger = Substitute.For<ILogger<StatsJob>>();
 		var boincService = Substitute.For<IBoincService>();
@@ -245,9 +246,9 @@ public class StatsJobTests {
 		var jobContext = Substitute.For<IJobExecutionContext>();
 		jobContext.CancellationToken.Returns(CancellationToken.None);
 
-		// Act & Assert
+		// Act & Assert - Should rethrow so Quartz knows the job failed
 		var act = () => job.Execute(jobContext);
-		await act.Should().NotThrowAsync();
+		await act.Should().ThrowAsync<Exception>().WithMessage("Network failure");
 
 		logger.Received(1).Log(
 			LogLevel.Error,
@@ -258,59 +259,31 @@ public class StatsJobTests {
 	}
 
 	private CoreClientState CreateMockCoreClientState(string hostName, string projectName, double hostCredit, double userCredit) {
-		var project = Substitute.For<Project>();
-		project.ProjectName.Returns(projectName);
-		project.MasterUrl.Returns($"https://{projectName.ToLower()}.org/");
-		project.UserTotalCredit.Returns(userCredit);
-		project.HostTotalCredit.Returns(hostCredit);
+		var masterUrl = $"https://{projectName.ToLower()}.org/";
+		var project = BoincRpcFactory.CreateProject(projectName, masterUrl, userCredit, hostCredit);
+		var result = BoincRpcFactory.CreateResult(
+			projectUrl: masterUrl,
+			receivedTime: DateTimeOffset.UtcNow.AddHours(-1));
+		var hostInfo = BoincRpcFactory.CreateHostInfo(hostName);
 
-		var result = Substitute.For<Result>();
-		result.ProjectUrl.Returns($"https://{projectName.ToLower()}.org/");
-		result.ReceivedTime.Returns(DateTimeOffset.UtcNow.AddHours(-1));
-		result.CurrentCpuTime.Returns(TimeSpan.FromSeconds(100));
-
-		var hostInfo = Substitute.For<HostInfo>();
-		hostInfo.DomainName.Returns(hostName);
-
-		var coreClientState = Substitute.For<CoreClientState>();
-		coreClientState.HostInfo.Returns(hostInfo);
-		coreClientState.Projects.Returns(new List<Project> { project });
-		coreClientState.Results.Returns(new List<Result> { result });
-
-		return coreClientState;
+		return BoincRpcFactory.CreateCoreClientState(
+			hostInfo: hostInfo,
+			projects: [project],
+			results: [result]);
 	}
 
 	private CoreClientState CreateMockCoreClientStateMultiProject(string hostName) {
-		var project1 = Substitute.For<Project>();
-		project1.ProjectName.Returns("Project1");
-		project1.MasterUrl.Returns("https://project1.org/");
-		project1.UserTotalCredit.Returns(2000.0);
-		project1.HostTotalCredit.Returns(1000.0);
+		var project1 = BoincRpcFactory.CreateProject("Project1", "https://project1.org/", 2000, 1000);
+		var project2 = BoincRpcFactory.CreateProject("Project2", "https://project2.org/", 3000, 1500);
 
-		var project2 = Substitute.For<Project>();
-		project2.ProjectName.Returns("Project2");
-		project2.MasterUrl.Returns("https://project2.org/");
-		project2.UserTotalCredit.Returns(3000.0);
-		project2.HostTotalCredit.Returns(1500.0);
+		var result1 = BoincRpcFactory.CreateResult(projectUrl: "https://project1.org/", receivedTime: DateTimeOffset.UtcNow);
+		var result2 = BoincRpcFactory.CreateResult(projectUrl: "https://project2.org/", receivedTime: DateTimeOffset.UtcNow);
 
-		var result1 = Substitute.For<Result>();
-		result1.ProjectUrl.Returns("https://project1.org/");
-		result1.ReceivedTime.Returns(DateTimeOffset.UtcNow);
-		result1.CurrentCpuTime.Returns(TimeSpan.FromSeconds(100));
+		var hostInfo = BoincRpcFactory.CreateHostInfo(hostName);
 
-		var result2 = Substitute.For<Result>();
-		result2.ProjectUrl.Returns("https://project2.org/");
-		result2.ReceivedTime.Returns(DateTimeOffset.UtcNow);
-		result2.CurrentCpuTime.Returns(TimeSpan.FromSeconds(100));
-
-		var hostInfo = Substitute.For<HostInfo>();
-		hostInfo.DomainName.Returns(hostName);
-
-		var coreClientState = Substitute.For<CoreClientState>();
-		coreClientState.HostInfo.Returns(hostInfo);
-		coreClientState.Projects.Returns(new List<Project> { project1, project2 });
-		coreClientState.Results.Returns(new List<Result> { result1, result2 });
-
-		return coreClientState;
+		return BoincRpcFactory.CreateCoreClientState(
+			hostInfo: hostInfo,
+			projects: [project1, project2],
+			results: [result1, result2]);
 	}
 }
