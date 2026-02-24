@@ -1,24 +1,26 @@
 ﻿using BoincWatchService.Services.Interfaces;
+using Microsoft.FeatureManagement;
+using System;
 using System.Net;
 using System.Net.Mail;
 using System.Threading.Tasks;
 
 namespace BoincWatchService.Services {
-	public class MailService : IMailService {
-		private readonly MailOptions _mailSettings;
-
-		public MailService(IOptions<MailOptions> mailSettings) {
-			_mailSettings = mailSettings.Value;
-		}
+	public class MailService(IOptions<MailOptions> mailSettings,
+			IVariantFeatureManager featureManager
+		) : IMailService {
 
 		public async Task SendMail(string subject, string body) {
-			if (!_mailSettings.IsEnabled) return;
-			using (var smtp = new SmtpClient(_mailSettings.SmtpHost, _mailSettings.SmtpPort)) {
+			if (!await featureManager.IsEnabledAsync("MailJob")) {
+				return;
+			}
+			var settings = mailSettings?.Value ?? throw new InvalidOperationException("Mail settings are not configured.");
+			using (var smtp = new SmtpClient(settings.SmtpHost, settings.SmtpPort)) {
 				smtp.UseDefaultCredentials = false;
-				smtp.Credentials = new NetworkCredential(_mailSettings.UserName, _mailSettings.Password);
+				smtp.Credentials = new NetworkCredential(settings.UserName, settings.Password);
 				using (var mailMessage = new MailMessage()) {
-					mailMessage.From = new MailAddress(_mailSettings.SenderAddress);
-					mailMessage.To.Add(_mailSettings.ToAddress);
+					mailMessage.From = new MailAddress(settings.SenderAddress);
+					mailMessage.To.Add(settings.ToAddress);
 					mailMessage.Body = body;
 					mailMessage.Subject = subject;
 					await smtp.SendMailAsync(mailMessage);

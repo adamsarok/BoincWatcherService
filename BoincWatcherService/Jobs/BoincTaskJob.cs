@@ -3,8 +3,8 @@ using BoincWatchService.Data;
 using BoincWatchService.Services;
 using BoincWatchService.Services.Interfaces;
 using EFCore.BulkExtensions;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.FeatureManagement;
 using Quartz;
 using System;
 using System.Collections.Generic;
@@ -17,9 +17,15 @@ namespace BoincWatchService.Jobs;
 
 public class BoincTaskJob(ILogger<BoincTaskJob> logger,
 		IBoincService boincService,
-		StatsDbContext context) : IJob {
+		StatsDbContext context,
+		IVariantFeatureManager featureManager
+		) : IJob {
 
 	public async Task Execute(IJobExecutionContext context) {
+		if (!await featureManager.IsEnabledAsync("TaskJob")) {
+			return;
+		}
+
 		logger.LogInformation("Boinc task job running at: {time}", DateTimeOffset.Now);
 
 		var st = await boincService.GetHostStates();

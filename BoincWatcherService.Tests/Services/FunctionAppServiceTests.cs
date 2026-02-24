@@ -16,7 +16,6 @@ public class FunctionAppServiceTests {
 		// Arrange
 		var logger = Substitute.For<ILogger<FunctionAppService>>();
 		var options = Options.Create(new FunctionAppOptions {
-			IsEnabled = true,
 			BaseUrl = "https://test.azurewebsites.net"
 		});
 
@@ -50,7 +49,6 @@ public class FunctionAppServiceTests {
 		// Arrange
 		var logger = Substitute.For<ILogger<FunctionAppService>>();
 		var options = Options.Create(new FunctionAppOptions {
-			IsEnabled = true,
 			BaseUrl = "https://test.azurewebsites.net"
 		});
 
@@ -84,7 +82,6 @@ public class FunctionAppServiceTests {
 		// Arrange
 		var logger = Substitute.For<ILogger<FunctionAppService>>();
 		var options = Options.Create(new FunctionAppOptions {
-			IsEnabled = true,
 			BaseUrl = "https://test.azurewebsites.net"
 		});
 
@@ -112,7 +109,6 @@ public class FunctionAppServiceTests {
 		// Arrange
 		var logger = Substitute.For<ILogger<FunctionAppService>>();
 		var options = Options.Create(new FunctionAppOptions {
-			IsEnabled = true,
 			BaseUrl = "https://test.azurewebsites.net"
 		});
 
@@ -140,38 +136,10 @@ public class FunctionAppServiceTests {
 	}
 
 	[Fact]
-	public void IsEnabled_WhenOptionsNull_ReturnsFalse() {
-		// Arrange
-		var logger = Substitute.For<ILogger<FunctionAppService>>();
-		var options = Options.Create<FunctionAppOptions>(null!);
-
-		var service = new FunctionAppService(options, logger);
-
-		// Assert
-		service.IsEnabled.Should().BeFalse();
-	}
-
-	[Fact]
-	public void IsEnabled_WhenOptionsEnabledTrue_ReturnsTrue() {
-		// Arrange
-		var logger = Substitute.For<ILogger<FunctionAppService>>();
-		var options = Options.Create(new FunctionAppOptions {
-			IsEnabled = true,
-			BaseUrl = "https://test.azurewebsites.net"
-		});
-
-		var service = new FunctionAppService(options, logger);
-
-		// Assert
-		service.IsEnabled.Should().BeTrue();
-	}
-
-	[Fact]
 	public async Task UploadStatsToFunctionApp_WhenBaseUrlMissing_ThrowsInvalidOperationException() {
 		// Arrange
 		var logger = Substitute.For<ILogger<FunctionAppService>>();
 		var options = Options.Create(new FunctionAppOptions {
-			IsEnabled = true,
 			BaseUrl = null!
 		});
 

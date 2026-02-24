@@ -9,6 +9,7 @@ using BoincWatchService.Services.Interfaces;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.FeatureManagement;
 using NSubstitute;
 using NSubstitute.ExceptionExtensions;
 using Quartz;
@@ -31,13 +32,14 @@ public class StatsJobTests {
 
 		var httpClientFactory = Substitute.For<IHttpClientFactory>();
 		var functionAppService = Substitute.For<IFunctionAppService>();
-		functionAppService.IsEnabled.Returns(false);
+		var featureManager = Substitute.For<IVariantFeatureManager>();
 
 		var statsService = new StatsService(
 			Substitute.For<ILogger<StatsService>>(),
 			context,
 			httpClientFactory,
-			functionAppService);
+			functionAppService,
+			featureManager);
 
 		var job = new StatsJob(logger, boincService, statsService);
 
@@ -135,13 +137,14 @@ public class StatsJobTests {
 
 		var httpClientFactory = Substitute.For<IHttpClientFactory>();
 		var functionAppService = Substitute.For<IFunctionAppService>();
-		functionAppService.IsEnabled.Returns(false);
+		var featureManager = Substitute.For<IVariantFeatureManager>();
 
 		var statsService = new StatsService(
 			Substitute.For<ILogger<StatsService>>(),
 			context,
 			httpClientFactory,
-			functionAppService);
+			functionAppService,
+			featureManager);
 
 		var job = new StatsJob(logger, boincService, statsService);
 
@@ -193,13 +196,14 @@ public class StatsJobTests {
 
 		var httpClientFactory = Substitute.For<IHttpClientFactory>();
 		var functionAppService = Substitute.For<IFunctionAppService>();
-		functionAppService.IsEnabled.Returns(false);
+		var featureManager = Substitute.For<IVariantFeatureManager>();
 
 		var statsService = new StatsService(
 			Substitute.For<ILogger<StatsService>>(),
 			context,
 			httpClientFactory,
-			functionAppService);
+			functionAppService,
+			featureManager);
 
 		var job = new StatsJob(logger, boincService, statsService);
 

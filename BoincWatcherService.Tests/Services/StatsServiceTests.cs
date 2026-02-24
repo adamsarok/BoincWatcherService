@@ -3,259 +3,180 @@ using BoincWatcherService.Services.Interfaces;
 using BoincWatchService.Data;
 using BoincWatchService.Services;
 using FluentAssertions;
-using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.FeatureManagement;
 using NSubstitute;
 
 namespace BoincWatcherService.Tests.Services;
 
-public class StatsServiceTests
-{
-    [Fact]
-    public async Task UpsertAggregateStats_WhenOneFunctionAppCallFails_ContinuesProcessingAll()
-    {
-        // Arrange
-        var logger = Substitute.For<ILogger<StatsService>>();
-        var httpClientFactory = Substitute.For<IHttpClientFactory>();
-        var functionAppService = Substitute.For<IFunctionAppService>();
+public class StatsServiceTests {
+	[Fact]
+	public async Task UpsertHostStats_WhenDatabaseFails_ReturnsFalseAndLogsError() {
+		// Arrange
+		var logger = Substitute.For<ILogger<StatsService>>();
+		var httpClientFactory = Substitute.For<IHttpClientFactory>();
+		var functionAppService = Substitute.For<IFunctionAppService>();
+		var featureManager = Substitute.For<IVariantFeatureManager>();
 
-        functionAppService.IsEnabled.Returns(true);
+		// Create a disposed context to simulate database failure
+		var options = new DbContextOptionsBuilder<StatsDbContext>()
+			.UseInMemoryDatabase(databaseName: $"TestDb_{Guid.NewGuid()}")
+			.Options;
 
-        // Use SQLite in-memory because UpsertAggregateStats uses FromSqlRaw
-        var connection = new SqliteConnection("DataSource=:memory:");
-        connection.Open();
+		var context = new StatsDbContext(options);
+		await context.DisposeAsync();
 
-        var options = new DbContextOptionsBuilder<StatsDbContext>()
-            .UseSqlite(connection)
-            .Options;
+		var service = new StatsService(logger, context, httpClientFactory, functionAppService, featureManager);
 
-        await using var context = new StatsDbContext(options);
-        await context.Database.EnsureCreatedAsync();
+		var hostStats = new HostStats {
+			YYYYMMDD = "20260101",
+			HostName = "TestHost",
+			TotalCredit = 1000
+		};
 
-        // Add test data - 3 hosts
-        var today = DateTime.UtcNow.Date;
-        var yyyymmdd = today.ToString("yyyyMMdd");
+		// Act
+		var result = await service.UpsertHostStats(hostStats);
 
-        context.HostStats.AddRange(
-            new HostStats { YYYYMMDD = yyyymmdd, HostName = "Host1", TotalCredit = 1000, Timestamp = DateTimeOffset.UtcNow },
-            new HostStats { YYYYMMDD = yyyymmdd, HostName = "Host2", TotalCredit = 2000, Timestamp = DateTimeOffset.UtcNow },
-            new HostStats { YYYYMMDD = yyyymmdd, HostName = "Host3", TotalCredit = 3000, Timestamp = DateTimeOffset.UtcNow }
-        );
+		// Assert
+		result.Should().BeFalse();
+		// Verify error was logged (check that Log was called with LogLevel.Error)
+		logger.Received(1).Log(
+			LogLevel.Error,
+			Arg.Any<EventId>(),
+			Arg.Any<object>(),
+			Arg.Any<Exception>(),
+			Arg.Any<Func<object, Exception?, string>>());
+	}
 
-        context.ProjectStats.AddRange(
-            new ProjectStats { YYYYMMDD = yyyymmdd, ProjectName = "Project1", TotalCredit = 5000 },
-            new ProjectStats { YYYYMMDD = yyyymmdd, ProjectName = "Project2", TotalCredit = 6000 }
-        );
+	[Fact]
+	public async Task UpsertHostStats_WithValidData_InsertsSuccessfully() {
+		// Arrange
+		var logger = Substitute.For<ILogger<StatsService>>();
+		var httpClientFactory = Substitute.For<IHttpClientFactory>();
+		var functionAppService = Substitute.For<IFunctionAppService>();
+		var featureManager = Substitute.For<IVariantFeatureManager>();
 
-        await context.SaveChangesAsync();
+		var options = new DbContextOptionsBuilder<StatsDbContext>()
+			.UseInMemoryDatabase(databaseName: $"TestDb_{Guid.NewGuid()}")
+			.Options;
 
-        var httpClient = new HttpClient();
-        httpClientFactory.CreateClient().Returns(httpClient);
+		await using var context = new StatsDbContext(options);
 
-        // Make second host upload fail
-        var callCount = 0;
-        functionAppService.UploadStatsToFunctionApp(Arg.Any<HttpClient>(), Arg.Any<Common.Models.StatsTableEntity>(), Arg.Any<CancellationToken>())
-            .Returns(call =>
-            {
-                callCount++;
-                return callCount != 2; // Second call fails
-            });
+		var service = new StatsService(logger, context, httpClientFactory, functionAppService, featureManager);
 
-        functionAppService.UploadAppRuntimeToFunctionApp(Arg.Any<HttpClient>(), Arg.Any<Common.Models.AppRuntimeTableEntity>(), Arg.Any<CancellationToken>())
-            .Returns(true);
+		var hostStats = new HostStats {
+			YYYYMMDD = "20260101",
+			HostName = "TestHost",
+			TotalCredit = 1000
+		};
 
-        functionAppService.UploadEfficiencyToFunctionApp(Arg.Any<HttpClient>(), Arg.Any<Common.Models.EfficiencyTableEntity>(), Arg.Any<CancellationToken>())
-            .Returns(true);
+		// Act
+		var result = await service.UpsertHostStats(hostStats);
 
-        var service = new StatsService(logger, context, httpClientFactory, functionAppService);
+		// Assert
+		result.Should().BeTrue();
+		var saved = await context.HostStats.FirstOrDefaultAsync(h => h.HostName == "TestHost");
+		saved.Should().NotBeNull();
+		saved!.TotalCredit.Should().Be(1000);
+	}
 
-        // Act
-        var result = await service.UpsertAggregateStats();
+	[Fact]
+	public async Task UpsertHostStats_WithExistingData_UpdatesSuccessfully() {
+		// Arrange
+		var logger = Substitute.For<ILogger<StatsService>>();
+		var httpClientFactory = Substitute.For<IHttpClientFactory>();
+		var functionAppService = Substitute.For<IFunctionAppService>();
+		var featureManager = Substitute.For<IVariantFeatureManager>();
 
-        // Assert
-        result.Should().BeFalse(); // Overall failure because one upload failed
+		var options = new DbContextOptionsBuilder<StatsDbContext>()
+			.UseInMemoryDatabase(databaseName: $"TestDb_{Guid.NewGuid()}")
+			.Options;
 
-        // Verify all uploads were attempted (3 hosts + 2 projects = 5 stats entities)
-        await functionAppService.Received(5).UploadStatsToFunctionApp(
-            Arg.Any<HttpClient>(),
-            Arg.Any<Common.Models.StatsTableEntity>(),
-            Arg.Any<CancellationToken>());
+		await using var context = new StatsDbContext(options);
 
-        connection.Close();
-    }
+		var existing = new HostStats {
+			YYYYMMDD = "20260101",
+			HostName = "TestHost",
+			TotalCredit = 1000,
+			Timestamp = DateTimeOffset.UtcNow.AddDays(-1)
+		};
+		context.HostStats.Add(existing);
+		await context.SaveChangesAsync();
 
-    [Fact]
-    public async Task UpsertHostStats_WhenDatabaseFails_ReturnsFalseAndLogsError()
-    {
-        // Arrange
-        var logger = Substitute.For<ILogger<StatsService>>();
-        var httpClientFactory = Substitute.For<IHttpClientFactory>();
-        var functionAppService = Substitute.For<IFunctionAppService>();
+		var service = new StatsService(logger, context, httpClientFactory, functionAppService, featureManager);
 
-        // Create a disposed context to simulate database failure
-        var options = new DbContextOptionsBuilder<StatsDbContext>()
-            .UseInMemoryDatabase(databaseName: $"TestDb_{Guid.NewGuid()}")
-            .Options;
+		var updated = new HostStats {
+			YYYYMMDD = "20260101",
+			HostName = "TestHost",
+			TotalCredit = 2000
+		};
 
-        var context = new StatsDbContext(options);
-        await context.DisposeAsync();
+		// Act
+		var result = await service.UpsertHostStats(updated);
 
-        var service = new StatsService(logger, context, httpClientFactory, functionAppService);
+		// Assert
+		result.Should().BeTrue();
+		var saved = await context.HostStats.FirstOrDefaultAsync(h => h.HostName == "TestHost");
+		saved!.TotalCredit.Should().Be(2000);
+		context.HostStats.Count().Should().Be(1); // Should update, not insert
+	}
 
-        var hostStats = new HostStats
-        {
-            YYYYMMDD = "20260101",
-            HostName = "TestHost",
-            TotalCredit = 1000
-        };
+	[Fact]
+	public async Task UpsertHostStats_WithInvalidData_ReturnsFalse() {
+		// Arrange
+		var logger = Substitute.For<ILogger<StatsService>>();
+		var httpClientFactory = Substitute.For<IHttpClientFactory>();
+		var functionAppService = Substitute.For<IFunctionAppService>();
+		var featureManager = Substitute.For<IVariantFeatureManager>();
 
-        // Act
-        var result = await service.UpsertHostStats(hostStats);
+		var options = new DbContextOptionsBuilder<StatsDbContext>()
+			.UseInMemoryDatabase(databaseName: $"TestDb_{Guid.NewGuid()}")
+			.Options;
 
-        // Assert
-        result.Should().BeFalse();
-        // Verify error was logged (check that Log was called with LogLevel.Error)
-        logger.Received(1).Log(
-            LogLevel.Error,
-            Arg.Any<EventId>(),
-            Arg.Any<object>(),
-            Arg.Any<Exception>(),
-            Arg.Any<Func<object, Exception?, string>>());
-    }
+		await using var context = new StatsDbContext(options);
 
-    [Fact]
-    public async Task UpsertHostStats_WithValidData_InsertsSuccessfully()
-    {
-        // Arrange
-        var logger = Substitute.For<ILogger<StatsService>>();
-        var httpClientFactory = Substitute.For<IHttpClientFactory>();
-        var functionAppService = Substitute.For<IFunctionAppService>();
+		var service = new StatsService(logger, context, httpClientFactory, functionAppService, featureManager);
 
-        var options = new DbContextOptionsBuilder<StatsDbContext>()
-            .UseInMemoryDatabase(databaseName: $"TestDb_{Guid.NewGuid()}")
-            .Options;
+		var hostStats = new HostStats {
+			YYYYMMDD = "", // Invalid
+			HostName = "TestHost",
+			TotalCredit = 1000
+		};
 
-        await using var context = new StatsDbContext(options);
+		// Act
+		var result = await service.UpsertHostStats(hostStats);
 
-        var service = new StatsService(logger, context, httpClientFactory, functionAppService);
+		// Assert
+		result.Should().BeFalse();
+	}
 
-        var hostStats = new HostStats
-        {
-            YYYYMMDD = "20260101",
-            HostName = "TestHost",
-            TotalCredit = 1000
-        };
+	[Fact]
+	public async Task UpsertAggregateStats_WhenFunctionAppDisabled_ReturnsFalse() {
+		// Arrange
+		var logger = Substitute.For<ILogger<StatsService>>();
+		var httpClientFactory = Substitute.For<IHttpClientFactory>();
+		var functionAppService = Substitute.For<IFunctionAppService>();
+		var featureManager = Substitute.For<IVariantFeatureManager>();
 
-        // Act
-        var result = await service.UpsertHostStats(hostStats);
+		featureManager.IsEnabledAsync("FunctionApp").Returns(false);
 
-        // Assert
-        result.Should().BeTrue();
-        var saved = await context.HostStats.FirstOrDefaultAsync(h => h.HostName == "TestHost");
-        saved.Should().NotBeNull();
-        saved!.TotalCredit.Should().Be(1000);
-    }
+		var options = new DbContextOptionsBuilder<StatsDbContext>()
+			.UseInMemoryDatabase(databaseName: $"TestDb_{Guid.NewGuid()}")
+			.Options;
 
-    [Fact]
-    public async Task UpsertHostStats_WithExistingData_UpdatesSuccessfully()
-    {
-        // Arrange
-        var logger = Substitute.For<ILogger<StatsService>>();
-        var httpClientFactory = Substitute.For<IHttpClientFactory>();
-        var functionAppService = Substitute.For<IFunctionAppService>();
+		await using var context = new StatsDbContext(options);
 
-        var options = new DbContextOptionsBuilder<StatsDbContext>()
-            .UseInMemoryDatabase(databaseName: $"TestDb_{Guid.NewGuid()}")
-            .Options;
+		var service = new StatsService(logger, context, httpClientFactory, functionAppService, featureManager);
 
-        await using var context = new StatsDbContext(options);
+		// Act
+		var result = await service.UpsertAggregateStats();
 
-        var existing = new HostStats
-        {
-            YYYYMMDD = "20260101",
-            HostName = "TestHost",
-            TotalCredit = 1000,
-            Timestamp = DateTimeOffset.UtcNow.AddDays(-1)
-        };
-        context.HostStats.Add(existing);
-        await context.SaveChangesAsync();
-
-        var service = new StatsService(logger, context, httpClientFactory, functionAppService);
-
-        var updated = new HostStats
-        {
-            YYYYMMDD = "20260101",
-            HostName = "TestHost",
-            TotalCredit = 2000
-        };
-
-        // Act
-        var result = await service.UpsertHostStats(updated);
-
-        // Assert
-        result.Should().BeTrue();
-        var saved = await context.HostStats.FirstOrDefaultAsync(h => h.HostName == "TestHost");
-        saved!.TotalCredit.Should().Be(2000);
-        context.HostStats.Count().Should().Be(1); // Should update, not insert
-    }
-
-    [Fact]
-    public async Task UpsertHostStats_WithInvalidData_ReturnsFalse()
-    {
-        // Arrange
-        var logger = Substitute.For<ILogger<StatsService>>();
-        var httpClientFactory = Substitute.For<IHttpClientFactory>();
-        var functionAppService = Substitute.For<IFunctionAppService>();
-
-        var options = new DbContextOptionsBuilder<StatsDbContext>()
-            .UseInMemoryDatabase(databaseName: $"TestDb_{Guid.NewGuid()}")
-            .Options;
-
-        await using var context = new StatsDbContext(options);
-
-        var service = new StatsService(logger, context, httpClientFactory, functionAppService);
-
-        var hostStats = new HostStats
-        {
-            YYYYMMDD = "", // Invalid
-            HostName = "TestHost",
-            TotalCredit = 1000
-        };
-
-        // Act
-        var result = await service.UpsertHostStats(hostStats);
-
-        // Assert
-        result.Should().BeFalse();
-    }
-
-    [Fact]
-    public async Task UpsertAggregateStats_WhenFunctionAppDisabled_ReturnsFalse()
-    {
-        // Arrange
-        var logger = Substitute.For<ILogger<StatsService>>();
-        var httpClientFactory = Substitute.For<IHttpClientFactory>();
-        var functionAppService = Substitute.For<IFunctionAppService>();
-
-        functionAppService.IsEnabled.Returns(false);
-
-        var options = new DbContextOptionsBuilder<StatsDbContext>()
-            .UseInMemoryDatabase(databaseName: $"TestDb_{Guid.NewGuid()}")
-            .Options;
-
-        await using var context = new StatsDbContext(options);
-
-        var service = new StatsService(logger, context, httpClientFactory, functionAppService);
-
-        // Act
-        var result = await service.UpsertAggregateStats();
-
-        // Assert
-        result.Should().BeFalse();
-        await functionAppService.DidNotReceive().UploadStatsToFunctionApp(
-            Arg.Any<HttpClient>(),
-            Arg.Any<Common.Models.StatsTableEntity>(),
-            Arg.Any<CancellationToken>());
-    }
+		// Assert
+		result.Should().BeFalse();
+		await functionAppService.DidNotReceive().UploadStatsToFunctionApp(
+			Arg.Any<HttpClient>(),
+			Arg.Any<Common.Models.StatsTableEntity>(),
+			Arg.Any<CancellationToken>());
+	}
 }

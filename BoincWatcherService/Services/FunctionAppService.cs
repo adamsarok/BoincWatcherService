@@ -1,7 +1,6 @@
 ﻿using BoincWatcherService.Services.Interfaces;
 using Common.Models;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using System;
 using System.Net.Http;
 using System.Net.Http.Json;
@@ -13,7 +12,6 @@ namespace BoincWatcherService.Services;
 public class FunctionAppService(
 	IOptions<FunctionAppOptions> functionAppOptions,
 	ILogger<FunctionAppService> logger) : IFunctionAppService {
-	public bool IsEnabled => functionAppOptions?.Value?.IsEnabled ?? false;
 
 	public async Task<bool> UploadAppRuntimeToFunctionApp(HttpClient httpClient, AppRuntimeTableEntity entity, CancellationToken cancellationToken) {
 		if (functionAppOptions is null) {

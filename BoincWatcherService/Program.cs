@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.FeatureManagement;
 using Quartz;
 using System;
 using System.Collections.Generic;
@@ -72,18 +73,19 @@ namespace BoincWatchService {
 				services.AddScoped<IStatsService, StatsService>();
 				services.AddScoped<IFunctionAppService, FunctionAppService>();
 
+				services.AddFeatureManagement();
+
 				services.AddQuartz(q => {
 					var mailOptions = hostContext.Configuration.GetSection("MailSettings").Get<MailOptions>();
 					var schedulingOptions = hostContext.Configuration.GetSection("SchedulingOptions").Get<Options.SchedulingOptions>();
 
-					if (mailOptions?.IsEnabled == true) {
-						var mailJobKey = new JobKey("MailNotificationJob");
-						q.AddJob<MailNotificationJob>(opts => opts.WithIdentity(mailJobKey));
-						q.AddTrigger(opts => opts
-							.ForJob(mailJobKey)
-							.WithIdentity("MailNotificationJob-trigger")
-							.WithCronSchedule(mailOptions.CronSchedule ?? "0 0 0 * * ?"));
-					}
+					var mailJobKey = new JobKey("MailNotificationJob");
+					q.AddJob<MailNotificationJob>(opts => opts.WithIdentity(mailJobKey));
+					q.AddTrigger(opts => opts
+						.ForJob(mailJobKey)
+						.WithIdentity("MailNotificationJob-trigger")
+						.WithCronSchedule(mailOptions?.CronSchedule ?? "0 0 0 * * ?"));
+
 
 					var statsJobKey = new JobKey("StatsUploadJob");
 					q.AddJob<StatsJob>(opts => opts.WithIdentity(statsJobKey));

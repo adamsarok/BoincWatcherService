@@ -5,6 +5,7 @@ using BoincWatchService.Services.Interfaces;
 using Common.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.FeatureManagement;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -18,7 +19,8 @@ public class StatsService(
 	ILogger<StatsService> logger,
 	StatsDbContext context,
 	IHttpClientFactory httpClientFactory,
-	IFunctionAppService functionAppService) : IStatsService {
+	IFunctionAppService functionAppService,
+	IVariantFeatureManager featureManager) : IStatsService {
 
 	public async Task<bool> UpsertHostStats(HostStats hostStats, CancellationToken cancellationToken = default) {
 		try {
@@ -107,7 +109,7 @@ public class StatsService(
 
 	public async Task<bool> UpsertAggregateStats(CancellationToken cancellationToken = default) {
 		try {
-			if (!functionAppService.IsEnabled) {
+			if (!await featureManager.IsEnabledAsync("FunctionApp")) {
 				logger.LogWarning("Function app is not enabled. Skipping aggregate stats upload.");
 				return false;
 			}
